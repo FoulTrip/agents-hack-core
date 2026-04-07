@@ -297,3 +297,11 @@ class ActivityReport(BaseModel):
     action: str
     message: Optional[str] = None
     thought: Optional[str] = None
+
+
+class PromptRequest(BaseModel):
+    prompt: str
+    project_name: Optional[str] = None
+    session_id: Optional[str] = None
+    webhook_url: Optional[str] = None
+    agentTasks: Optional[Any] = None

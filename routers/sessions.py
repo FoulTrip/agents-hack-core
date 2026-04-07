@@ -152,18 +152,25 @@ async def delete_session(session_id: str, user: dict = Depends(get_current_user)
 @router.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """WebSocket para actualizaciones en tiempo real"""
-
-    await websocket.accept()
+    logger.info(f"WebSocket connection attempt for session: {session_id}")
+    
+    try:
+        await websocket.accept()
+        logger.info(f"WebSocket accepted for session: {session_id}")
+    except Exception as e:
+        logger.error(f"Failed to accept WebSocket: {e}")
+        return
+    
     try:
         session = await session_manager.get_session(session_id)
         if not session:
+            logger.warning(f"Session not found: {session_id}")
             await websocket.send_json({"type": "error", "message": "Sesión no encontrada"})
             await websocket.close()
             return
 
-        # Obtener userId de los query params o del token si fuera posible
-        # Para el HUD, solemos pasarlo en query params o lo tenemos en el contexto
         user_id_ws = websocket.query_params.get("userId")
+        logger.info(f"Session found, connecting WS for user: {user_id_ws}")
         
         session_manager.add_websocket(session_id, websocket, user_id=user_id_ws)
         
@@ -184,16 +191,24 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 "completedPhases": getattr(session, "completedPhases", []),
                 "history": [serialize_message(m) for m in session.messages] if hasattr(session, "messages") and session.messages else []
             })
-        except (WebSocketDisconnect, Exception):
+            logger.info(f"Initial state sent to websocket for session: {session_id}")
+        except (WebSocketDisconnect, Exception) as e:
+            logger.error(f"Error sending initial state: {e}")
             session_manager.remove_websocket(session_id, websocket)
             return
 
         while True:
-            await websocket.receive_text()
+            try:
+                await websocket.receive_text()
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected normally for session: {session_id}")
+                break
+            except Exception as e:
+                logger.error(f"Error in websocket receive: {e}")
+                break
 
-    except WebSocketDisconnect:
-        pass
     except Exception as e:
-        logger.warning(f"WebSocket cerrado inesperadamente: {e}")
+        logger.error(f"WebSocket error for session {session_id}: {e}")
     finally:
+        logger.info(f"Cleaning up websocket for session: {session_id}")
         session_manager.remove_websocket(session_id, websocket)
