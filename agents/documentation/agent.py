@@ -1,0 +1,50 @@
+from google.adk.agents import Agent
+from core.logger import get_logger
+from .prompts import SYSTEM_PROMPT
+from .tools import save_documentation_tool
+
+logger = get_logger(__name__)
+
+async def create_documentation_agent(
+    user_agents: list = None, 
+    model: str = "gemini-3-flash-preview",
+    user_id: str | None = None,
+    session_id: str | None = None
+) -> Agent:
+    """
+    Crea el agente de documentación con inyección dinámica de gobernanza y decisiones.
+    """
+    logger.debug(f"Creando Documentation Agent con modelo: {model} para usuario {user_id}")
+    user_agents = user_agents or []
+    
+    my_config = next((a for a in user_agents if getattr(a, "role", "") == "documentation_agent"), None)
+    agent_model = getattr(my_config, "model", model) if my_config else model
+    instruction = SYSTEM_PROMPT
+    
+    from core.context import get_augmented_system_prompt
+    
+    if my_config:
+        custom_parts = []
+        if getattr(my_config, "personality", None):
+            custom_parts.append(f"Tu personalidad: {my_config.personality}")
+        if getattr(my_config, "context", None):
+            custom_parts.append(f"Tu contexto: {my_config.context}")
+        if getattr(my_config, "guidelines", None):
+            custom_parts.append(f"Reglas y directrices extra: {my_config.guidelines}")
+        
+        if custom_parts:
+            instruction += "\n\n<<<CONFIGURACIÓN PERSONALIZADA DEL USUARIO>>>\n" + "\n".join(custom_parts)
+
+    # Aumentar con Gobernanza y Decisiones (Context V2)
+    if user_id:
+        instruction = await get_augmented_system_prompt(
+            user_id, session_id, "documentation_agent", instruction
+        )
+    
+    return Agent(
+        name="documentation_agent",
+        model=agent_model,
+        description="Genera documentación técnica completa del proyecto y la sube a GitHub y Notion.",
+        instruction=instruction,
+        tools=[save_documentation_tool],
+    )

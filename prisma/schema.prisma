@@ -1,0 +1,573 @@
+// Prisma Schema for Software Factory (MongoDB)
+// Version 7.x — Claw3D Full Integration
+// Covers: Analytics, Skills, Kanban, Agent Identity, HQ Runs, Playbooks, Memory
+
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = -1
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================
+// USER
+// =============================================================
+
+model User {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  email             String    @unique
+  passwordHash      String?
+  name              String?
+  googleId          String?   @unique
+  
+  // Custom Workflow Credentials
+  githubToken       String?
+  notionToken       String?
+  notionWorkspaceId String?
+  
+  // Google Cloud (GCP) OAuth Tokens
+  gcpAccessToken    String?
+  gcpRefreshToken   String?
+  gcpExpiresAt      Int?
+  gcpScope          String?
+  
+  // Profile Details
+  avatar            String?
+  googleAvatar      String?
+  avatarType        String?   @default("custom")  // "custom" or "google"
+  bio               String?
+  role              String?   @default("Developer")
+  language          String?   @default("es")      // "en" or "es"
+  country           String?   @default("CO")      // ISO country code (e.g. "CO", "US", "ES")
+  preferredModel    String?   @default("gemini-flash")
+  
+  // Office Configuration
+  officeTheme       String?   @default("modern")
+  officeDefaults    String?   // JSON configuration for the 3D office (desks, rooms, etc.)
+
+  // Relations
+  sessions          ProjectSession[]
+  agents            Agent[]
+  budgets           AnalyticsBudget[]
+  layouts           WorkspaceLayout[] @relation("UserLayouts")
+  roleDefinitions   AgentRoleDefinition[] @relation("UserRoles")
+  workSchedules     WorkSchedule[]
+  standupMeetings   StandupMeeting[]
+  globalContext     UserGlobalContext?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// =============================================================
+// AGENT — Extended for Claw3D Agent Editor
+// =============================================================
+
+model Agent {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @db.ObjectId
+  user              User      @relation(fields: [userId], references: [id])
+  name              String    // E.g., "Advisor Agent"
+  role              String    // E.g., "requirements_agent" (also used as slug)
+  // Optional user-defined role template
+  roleDefinitionId  String?   @db.ObjectId
+  roleDefinition    AgentRoleDefinition? @relation(fields: [roleDefinitionId], references: [id])
+  icon              String    // Lucide icon name
+  color             String    // Hex or tailwind color
+  description       String?
+  model             String    @default("gemini-3-flash-preview")
+
+  // === Claw3D IDENTITY.md ===
+  vibe              String?   // E.g., "Calm, sharp, and helpful"
+  emoji             String?   // E.g., "🧠"
+
+  // === Claw3D SOUL / Persona ===
+  personality       String?   // E.g., "Eres analítico y estricto"
+  context           String?   // E.g., "Tienes 15 años de experiencia UX"
+  guidelines        String?   // E.g., "No uses código spaghetti, etc."
+  boundaries        String?   // What this agent will NOT do
+
+  // === Claw3D AGENTS.md (Operating instructions) ===
+  operatingInstructions String? // Priority rules, chain of thought, etc.
+
+  // Big Five Personality Traits (0-1)
+  openness          Float @default(0.5)
+  conscientiousness Float @default(0.5)
+  extraversion      Float @default(0.5)
+  agreeableness     Float @default(0.5)
+  neuroticism       Float @default(0.5)
+
+  tools             String[]        // Tool slugs enabled for this agent
+  connectors        String[]        @default([])
+
+  // === Claw3D MEMORY.md ===
+  memoryNotes       String?         // Durable long-term notes
+  memoryUpdatedAt   DateTime?
+
+  // === Claw3D HEARTBEAT.md ===
+  heartbeatChecklist String[]       @default([]) // Small tasks for heartbeat runs
+
+  // === Claw3D Avatar / Office Appearance ===
+  avatarStyle       String?         // e.g. "pixel", "3d", "emoji"
+  avatarUrl         String?         // Custom profile picture URL
+  temperature       Float           @default(0.7)
+  maxTokens         Int             @default(4096)
+  officeDesk        String?         // Desk ID in the 3D office layout
+  officeWing        String?         // Office grouping (e.g. "Dev", "Exec")
+  officeFloor       Int             @default(1)
+  socialTone        String?         // "Formal", "Casual", etc.
+  standupBehavior   String?         // "Leader", "Participant"
+  computerType      String?         @default("high-end-pc") // "laptop", "pc", "macbook"
+  status            String          @default("idle")       // "working", "sitting", "walking"
+  avatarProfile     Json?           // Skin, hair, shirt colors etc
+
+  order             Int       @default(0)
+  active            Boolean   @default(true)
+
+  // Relations
+  skills            AgentSkill[]
+  kanbanTasks       KanbanTask[]
+  memoryEntries     AgentMemory[]
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// =============================================================
+// AGENT ROLE DEFINITION — User-configurable roles
+// =============================================================
+
+model AgentRoleDefinition {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  user         User     @relation("UserRoles", fields: [userId], references: [id])
+
+  name         String            // e.g. "Software Engineer"
+  slug         String            // e.g. "software_engineer"
+  description  String?
+  icon         String?  @default("Cpu")
+  color        String?  @default("#6366F1")
+  
+  // Custom Persona Template
+  systemPrompt String?
+  personality  String?
+  context      String?
+  guidelines   String?
+  boundaries   String?
+  instructions String?
+  
+  isDefault    Boolean  @default(false)
+  agents       Agent[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// =============================================================
+// PROJECT SESSION
+// =============================================================
+
+model ProjectSession {
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId        String       @unique
+  title            String
+  initialPrompt    String
+  status           String       // "pending", "running", "completed", "failed"
+  currentPhase     Int?
+  completedPhases  Int[]        @default([])
+  errorMessage     String?
+
+  // Auth relation
+  userId           String       @db.ObjectId
+  user             User         @relation(fields: [userId], references: [id])
+
+  // History
+  messages         Message[]
+  artifacts        Artifact[]
+  agentActivities  AgentActivity[]
+  hqRuns           HQRun[]
+
+  // Session Metrics (fed into Analytics)
+  totalTokens      Int?         @default(0)
+  totalDurationMs  Int?         @default(0)
+  costEstimate     Float?       @default(0)
+  inputTokens      Int?         @default(0)
+  outputTokens     Int?         @default(0)
+  cacheReadTokens  Int?         @default(0)
+  cacheWriteTokens Int?         @default(0)
+
+  // Linked external resources
+  notionPages      NotionPage[]
+  githubRepos      GithubRepo[]
+  decisions        SessionDecision[]
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+// =============================================================
+// FACTORY LAYOUT — Dynamic office wings
+// =============================================================
+
+model WorkspaceLayout {
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String       @db.ObjectId
+  user             User         @relation("UserLayouts", fields: [userId], references: [id])
+  
+  wingId           String       @unique // "main" for HQ, or sessionId for dynamic wings
+  wingLabel        String
+  offsetX          Int
+  
+  furniture        String       // JSON array string of furniture items
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+// =============================================================
+// MESSAGE / ARTIFACT / NOTION / GITHUB (unchanged)
+// =============================================================
+
+model Message {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId  String         @db.ObjectId
+  session    ProjectSession @relation(fields: [sessionId], references: [id])
+  role       String         // "user" | "assistant"
+  content    String
+  createdAt  DateTime       @default(now())
+}
+
+model Artifact {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId  String         @db.ObjectId
+  session    ProjectSession @relation(fields: [sessionId], references: [id])
+  type       String         // "prd", "arch", "code", "qa", "docs", "devops"
+  title      String
+  url        String?
+  createdAt  DateTime       @default(now())
+}
+
+model NotionPage {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId  String         @db.ObjectId
+  session    ProjectSession @relation(fields: [sessionId], references: [id])
+  title      String
+  pageId     String
+  url        String
+  createdAt  DateTime       @default(now())
+}
+
+model GithubRepo {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId  String         @db.ObjectId
+  session    ProjectSession @relation(fields: [sessionId], references: [id])
+  name       String
+  fullName   String
+  url        String
+  createdAt  DateTime       @default(now())
+}
+
+// =============================================================
+// AGENT ACTIVITY — Phase-level tracking for office presence
+// =============================================================
+
+model AgentActivity {
+  id               String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId        String         @db.ObjectId
+  session          ProjectSession @relation(fields: [sessionId], references: [id])
+  agentName        String
+  agentRole        String
+  taskDescription  String?
+  status           String         @default("idle") // "idle","working","completed","failed"
+  model            String?        // e.g. "gemini-1.5-pro", "claude-3-5-sonnet"
+  
+  startTime        DateTime       @default(now())
+  endTime          DateTime?
+  durationMs       Int?
+  tokenCount       Int?
+  inputTokens      Int?
+  outputTokens     Int?
+  costEstimate     Float?
+  performanceScore Float?
+  thoughtProcess   String?
+
+  // Claw3D physical office mapping
+  workspaceId      String?        // Desk or room ID in 3D layout
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+// =============================================================
+// HQ RUNS — "Completed Runs" shown in HQ Results Center
+// =============================================================
+
+model HQRun {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId     String         @db.ObjectId
+  session       ProjectSession @relation(fields: [sessionId], references: [id])
+
+  agentName     String         // Which agent produced this output
+  agentRole     String
+  output        String         // Final assistant output for this run
+  model         String?        // e.g. "gemini-pro"
+  toolCalls     Int?           @default(0)
+  approvals     Int?           @default(0)
+  durationMs    Int?
+  tokenCount    Int?
+  success       Boolean        @default(true)
+
+  createdAt     DateTime       @default(now())
+}
+
+// =============================================================
+// SKILLS MARKETPLACE — Claw3D skill management
+// =============================================================
+
+model Skill {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  slug          String       @unique  // e.g. "todo", "task-manager", "soundclaw"
+  name          String                // e.g. "Task Manager"
+  category      String?               // e.g. "Productivity", "Audio"
+  description   String?
+  author        String?               // e.g. "iamlukethedev"
+  source        String?               // "community", "built-in", "workspace"
+  featured      Boolean      @default(false)
+  packageSource String?               // npm package or git repo
+  
+  // Per-agent installs
+  agentSkills   AgentSkill[]
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// Join table: which agents have which skills installed/enabled
+model AgentSkill {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  agentId     String    @db.ObjectId
+  agent       Agent     @relation(fields: [agentId], references: [id])
+  skillId     String    @db.ObjectId
+  skill       Skill     @relation(fields: [skillId], references: [id])
+
+  installed   Boolean   @default(false)
+  enabled     Boolean   @default(true)
+  needsSetup  Boolean   @default(true)
+  config      String?   // JSON blob for skill-specific configuration
+
+  installedAt DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// =============================================================
+// KANBAN — Task Manager (requires task-manager skill)
+// =============================================================
+
+model KanbanTask {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  agentId      String    @db.ObjectId
+  agent        Agent     @relation(fields: [agentId], references: [id])
+
+  title        String
+  description  String?
+  status       String    @default("todo")   // "todo", "in_progress", "blocked", "done"
+  priority     String?   @default("medium") // "low", "medium", "high"
+  blockedBy    String[]  @default([])        // IDs of blocking tasks
+  sessionRef   String?   // Reference to the session that created this task
+  dueDate      DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// =============================================================
+// ANALYTICS — Cost, tokens, and performance (Claw3D Analytics tab)
+// =============================================================
+
+model AnalyticsSnapshot {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  date            DateTime  @unique // One snapshot per day
+  
+  // Spend
+  totalCostUsd    Float     @default(0)
+  inputCostUsd    Float     @default(0)
+  outputCostUsd   Float     @default(0)
+  cacheReadCost   Float     @default(0)
+  cacheWriteCost  Float     @default(0)
+
+  // Usage
+  totalTokens     Int       @default(0)
+  inputTokens     Int       @default(0)
+  outputTokens    Int       @default(0)
+
+  // Performance
+  totalRuns       Int       @default(0)
+  successfulRuns  Int       @default(0)
+  failedRuns      Int       @default(0)
+  totalToolCalls  Int       @default(0)
+  totalApprovals  Int       @default(0)
+  avgRuntimeMs    Int?
+
+  // Top spenders (JSON blobs for flexibility)
+  agentSpend      String?   // JSON: {agentName: cost, ...}
+  modelBreakdown  String?   // JSON: {modelName: {tokens, cost}, ...}
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Budget limits set by the user for Claw3D Analytics
+model AnalyticsBudget {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String    @db.ObjectId
+  user             User      @relation(fields: [userId], references: [id])
+
+  dailyLimitUsd    Float?    // null = no limit
+  monthlyLimitUsd  Float?
+  perAgentLimitUsd Float?    // soft limit
+  alertThreshold   Float     @default(0.8) // 80%
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// =============================================================
+// PLAYBOOKS — HQ scheduled/reusable automation sequences
+// =============================================================
+
+model Playbook {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  description  String?
+  steps        String    // JSON: [{agentRole, prompt, order}, ...]
+  schedule     String?   // cron expression or null for manual
+  active       Boolean   @default(true)
+  lastRunAt    DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// =============================================================
+// AGENT MEMORY — Claw3D MEMORY.md durable memory entries
+// =============================================================
+
+model AgentMemory {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  agentId   String    @db.ObjectId
+  agent     Agent     @relation(fields: [agentId], references: [id])
+
+  key       String    // Short label, e.g. "client_preferences"
+  value     String    // The memory content (text or JSON)
+  source    String?   // "user", "agent", "session"
+  sessionRef String?  // Which session triggered this memory
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// =============================================================
+// WORKFLOW SCHEDULING — Office hours and Events
+// =============================================================
+
+model WorkSchedule {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String    @db.ObjectId
+  user         User      @relation(fields: [userId], references: [id])
+
+  name         String    @default("Semana Laboral") // Ej: "Sprint Week", "Horario QA"
+  daysEnabled  String[]  // ["MONDAY", "TUESDAY", ..., "SUNDAY"]
+  startHour    String    @default("09:00")
+  endHour      String    @default("18:00")
+  timezone     String    @default("America/Bogota")
+  
+  // Custom slots for agents or specifics
+  agentOverrides String? // JSON: {agentId: {startHour, endHour, daysEnabled}}
+
+  // Standups that run under this schedule
+  standups     StandupMeeting[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model StandupMeeting {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String        @db.ObjectId
+  user         User          @relation(fields: [userId], references: [id])
+
+  // Optional link to a WorkSchedule (for synchronization)
+  scheduleId   String?       @db.ObjectId
+  schedule     WorkSchedule? @relation(fields: [scheduleId], references: [id])
+
+  title        String    @default("Daily Standup")
+  description  String?
+  location     String    @default("CONFERENCE_ROOM")
+  
+  // Schedule (e.g., "Monday-Friday at 08:00")
+  cron         String?
+  time         String?
+  
+  // Agenda / Topics configuration
+  agenda       String?   // JSON: [{agentId, topic, order, description}, ...]
+  
+  active       Boolean   @default(true)
+  lastRunAt    DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// =============================================================
+// GESTIÓN AVANZADA DE CONTEXTO & MEMORIA (OPTIMIZADA V2)
+// =============================================================
+
+model UserGlobalContext {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @db.ObjectId @unique
+  user              User      @relation(fields: [userId], references: [id])
+  
+  // Preferencias de la "Factoría"
+  techStack         String[]  // ["Next.js", "Prisma", "NestJS"]
+  codingStyle       String?   // "Clean Code, SOLID, Functional"
+  namingConventions Json?     // { "ts": "camelCase", "python": "snake_case" }
+  constraints       String[]  // "Priorizar rendimiento sobre legibilidad", "No usar Any en TS"
+  
+  documentationLinks String[] 
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model SessionDecision {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId    String         @db.ObjectId
+  session      ProjectSession @relation(fields: [sessionId], references: [id])
+  
+  category     String         // "architecture", "ui_ux", "business_logic"
+  decision     String         // "Usar PostgreSQL en lugar de MongoDB"
+  rationale    String?        // "Motivo: Necesidad de transacciones ACID complejas"
+  
+  // Gestión de vigencia
+  status       String         @default("active") // "active", "superseded", "deprecated"
+  replacedById String?        @db.ObjectId      // Referencia a la decisión que la anula
+  
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model AgentKnowledge {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?  @db.ObjectId
+  agentId   String?  @db.ObjectId
+  
+  content   String
+  vector    Float[]  // Para búsqueda semántica en MongoDB Atlas
+  metadata  Json     // { "agentRole": "QA", "importance": 1-10, "sessionId": "..." }
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
