@@ -27,11 +27,11 @@ from core.agenda_engine import start_scheduler
 async def lifespan(app: FastAPI):
     await db_manager.connect()
     start_scheduler()
-    logger.info("Software Factory API con MongoDB iniciada. Scheduler activo.")
+    logger.info("TripKode Agents API con MongoDB iniciada. Scheduler activo.")
     yield
     await db_manager.disconnect()
 
-app = FastAPI(title="Software Factory API", lifespan=lifespan)
+app = FastAPI(title="TripKode Agents API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     
     print("""
 ╔══════════════════════════════════════════════════════════╗
-║           Software Factory API - Iniciando               ║
+║             TripKode Agents API - Iniciando              ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Endpoints:                                              ║
 ║  • POST /api/generate    - Iniciar pipeline              ║

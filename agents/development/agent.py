@@ -17,11 +17,24 @@ async def create_development_agent(
     logger.debug(f"Creando Development Agent con modelo: {model} para usuario {user_id}")
     user_agents = user_agents or []
     
-    my_config = next((a for a in user_agents if getattr(a, "role", "") == "development_agent"), None)
-    agent_model = getattr(my_config, "model", model) if my_config else model
-    instruction = SYSTEM_PROMPT
-    
+    from core.llm.dispatcher import MODEL_ALIASES
     from core.context import get_augmented_system_prompt
+    
+    my_config = next((a for a in user_agents if getattr(a, "role", "") == "development_agent"), None)
+
+    # Parámetros individuales del agente
+    agent_model = model
+    agent_temp = 0.7
+    agent_max_tokens = 4096
+
+    if my_config:
+        if getattr(my_config, "model", None):
+            agent_model = MODEL_ALIASES.get(my_config.model, my_config.model)
+        
+        agent_temp = getattr(my_config, "temperature", 0.7)
+        agent_max_tokens = getattr(my_config, "maxTokens", 4096)
+
+    instruction = SYSTEM_PROMPT
     
     if my_config:
         custom_parts = []
@@ -47,4 +60,8 @@ async def create_development_agent(
         description="Genera el código fuente base del proyecto y lo sube a un repositorio de GitHub.",
         instruction=instruction,
         tools=[setup_repository_tool, create_file_tool, create_multiple_files_tool],
+        generate_content_config={
+            "temperature": agent_temp,
+            "max_output_tokens": agent_max_tokens,
+        },
     )

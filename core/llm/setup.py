@@ -8,8 +8,8 @@ def setup_adk_vertex():
     Configura el ADK para usar Vertex AI y registra el soporte para Claude.
     """
     try:
-        # Configurar variables de entorno requeridas para Vertex AI
-        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+        # Eliminamos la configuración estricta global. El Dispatcher lo manejará.
+        # os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
         
         # Intentar registrar Claude si la librería está disponible
         from google.adk.models.anthropic_llm import Claude

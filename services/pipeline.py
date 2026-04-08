@@ -1,3 +1,4 @@
+import asyncio
 import re
 from typing import Optional
 from core.db import db_manager
@@ -14,23 +15,28 @@ async def extract_and_link_artifacts(session_id: str, text: str, user_config: di
     """Extrae enlaces de Notion y GitHub y los guarda en la DB"""
     notion_token = user_config.get("notionToken") if user_config else None
     
+    last_notion_url = None
     notion_links = re.findall(r'https://www\.notion\.so/([A-Za-z0-9-]+)', text)
     for link in notion_links:
+        last_notion_url = f"https://www.notion.so/{link}"
         await session_manager.link_notion_page(
             session_id=session_id,
             title="Página Generada",
-            url=f"https://www.notion.so/{link}",
+            url=last_notion_url,
             page_id=link.split('-')[-1]
         )
     
+    repo_url = None
     github_links = re.findall(r'https://github\.com/([A-Za-z0-9_-]+/[A-Za-z0-9_-]+)', text)
     for repo in github_links:
+        repo_url = f"https://github.com/{repo}"
         await session_manager.link_github_repo(
             session_id=session_id,
             name=repo.split('/')[-1],
-            url=f"https://github.com/{repo}",
+            url=repo_url,
             full_name=repo
         )
+    return {"repoUrl": repo_url, "notionDoc": {"url": last_notion_url, "title": "Página de la Fase"} if last_notion_url else None}
 
 
 async def cleanup_external_resources(session, user_id: str):
@@ -139,8 +145,10 @@ async def run_pipeline_with_callbacks(
         )
         
         # Inyección Activa de Gobernanza y Decisiones (Punto 1)
+        preferred_model = getattr(user_db, "preferredModel", "gemini-flash") or "gemini-flash"
         agent = await create_orchestrator(
             user_agents=user_agents, 
+            model=preferred_model,
             user_id=user_id_internal, 
             session_id=session_id
         )
@@ -185,7 +193,7 @@ async def run_pipeline_with_callbacks(
                 }.items() if v is not None
             }
 
-            set_user_context(current_phase_config)
+            set_user_context(user_id_internal, session_id, current_phase_config)
 
             # 1. Verificar Presupuesto antes de cada fase (🛑 Bloqueo Activo)
             authorized = await BudgetGuardian.check_budget_authorization(user_id_internal)
@@ -236,7 +244,7 @@ async def run_pipeline_with_callbacks(
 
             start_t = datetime.now()
 
-            session = await session_service.create_session(app_name="software-factory", user_id=user_id_internal)
+            session = await session_service.create_session(app_name="tripkode-agents", user_id=user_id_internal)
             from core.llm.dispatcher import LLMDispatcher
             from core.security.sanitizer import sanitize_prompt
             preferred_model = getattr(user_db, "preferredModel", "gemini-flash") or "gemini-flash"
@@ -308,7 +316,7 @@ async def run_pipeline_with_callbacks(
             except Exception:
                 pass
 
-            await extract_and_link_artifacts(session_id, response_text or "", user_config=user_config)
+            found_artifacts = await extract_and_link_artifacts(session_id, response_text or "", user_config=user_config)
             
             await session_manager.add_message(session_id, "assistant", f"Fase {phase_id} ({label}) completada:\n{response_text}")
             
@@ -318,6 +326,8 @@ async def run_pipeline_with_callbacks(
                 "phase_label": label,
                 "logs": [f"✅ Fase {phase_id} completada", response_text],
                 "message": response_text,
+                "repoUrl": found_artifacts.get("repoUrl"),
+                "notionDoc": found_artifacts.get("notionDoc"),
                 "done": True
             })
             

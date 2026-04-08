@@ -120,6 +120,31 @@ async def approve_phase(session_id: str, user: dict = Depends(get_current_user))
     return {"status": "success", "message": "Fase aprobada"}
 
 
+@router.post("/reject/{session_id}")
+async def reject_phase(session_id: str, feedback: dict, user: dict = Depends(get_current_user)):
+    """Rechaza la fase actual y envía feedback para re-ejecución"""
+    session = await db_manager.client.projectsession.find_unique(where={"sessionId": session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    if str(session.userId) != user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    comment = feedback.get("message", "No se proporcionó feedback específico.")
+    
+    # Añadimos el feedback como un mensaje del usuario para el contexto del agente
+    await session_manager.add_message(session_id, "user", f"SOLICITUD DE CAMBIOS: {comment}")
+    
+    # Cambiamos el estado para que pipeline.py reaccione
+    await session_manager.update_session(session_id, status="rejected")
+    
+    await session_manager.broadcast_to_session(session_id, {
+        "type": "rejected",
+        "message": f"❌ Cambios solicitados: {comment}"
+    })
+    
+    return {"status": "success", "message": "Feedback enviado"}
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, user: dict = Depends(get_current_user)):
     """Elimina una sesión y todos sus datos asociados"""
@@ -182,14 +207,56 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 "createdAt": msg.createdAt.isoformat() if msg.createdAt else None
             }
 
+        def serialize_activity(act) -> dict:
+            return {
+                "id": str(act.id),
+                "agentName": act.agentName,
+                "agentRole": act.agentRole,
+                "taskDescription": act.taskDescription,
+                "status": act.status,
+                "model": act.model,
+                "startTime": act.startTime.isoformat() if act.startTime else None,
+                "endTime": act.endTime.isoformat() if act.endTime else None,
+                "durationMs": act.durationMs,
+                "tokenCount": act.tokenCount,
+                "costEstimate": act.costEstimate
+            }
+
+        def serialize_notion(page) -> dict:
+            return {
+                "id": str(page.id),
+                "title": page.title,
+                "url": page.url,
+                "pageId": page.pageId
+            }
+
+        def serialize_github(repo) -> dict:
+            return {
+                "name": repo.name,
+                "url": repo.url,
+                "fullName": repo.fullName
+            }
+
         try:
+            # Extraemos el último repo y página para conveniencia del frontend (compatibilidad con broadcasts)
+            latest_repo = session.githubRepos[-1].url if hasattr(session, "githubRepos") and session.githubRepos else None
+            latest_notion = {
+                "url": session.notionPages[-1].url,
+                "title": session.notionPages[-1].title
+            } if hasattr(session, "notionPages") and session.notionPages else None
+
             await websocket.send_json({
                 "type": "session_state",
                 "session_id": session_id,
                 "status": session.status,
                 "currentPhase": getattr(session, "currentPhase", None),
                 "completedPhases": getattr(session, "completedPhases", []),
-                "history": [serialize_message(m) for m in session.messages] if hasattr(session, "messages") and session.messages else []
+                "history": [serialize_message(m) for m in session.messages] if hasattr(session, "messages") and session.messages else [],
+                "activities": [serialize_activity(a) for a in session.agentActivities] if hasattr(session, "agentActivities") and session.agentActivities else [],
+                "notionPages": [serialize_notion(p) for p in session.notionPages] if hasattr(session, "notionPages") and session.notionPages else [],
+                "githubRepos": [serialize_github(r) for r in session.githubRepos] if hasattr(session, "githubRepos") and session.githubRepos else [],
+                "repoUrl": latest_repo,
+                "notionDoc": latest_notion
             })
             logger.info(f"Initial state sent to websocket for session: {session_id}")
         except (WebSocketDisconnect, Exception) as e:

@@ -1,6 +1,5 @@
-from google.adk.tools import tool
+from google.adk.tools import FunctionTool
 
-@tool
 def propose_project_decision(category: str, decision: str, rationale: str) -> str:
     """
     IMPORTANTE: Úsala SOLAMENTE cuando notes que el usuario y tú (u otros agentes)
@@ -33,3 +32,5 @@ def propose_project_decision(category: str, decision: str, rationale: str) -> st
     logger.info(f"🧠 Aprendizaje Dinámico - Decisión registrada: {decision}")
     
     return f"¡Hecho! He registrado oficialmente la decisión: '{decision}' como parte del Estado de Verdad del proyecto."
+
+propose_project_decision_tool = FunctionTool(propose_project_decision)

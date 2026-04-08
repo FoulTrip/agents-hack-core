@@ -69,18 +69,41 @@ async def upsert_global_context(config: UserContextModel, user_token: dict = Dep
 @router.get("/decisions/{session_id}", response_model=List[DecisionModel])
 async def list_session_decisions(session_id: str, user_token: dict = Depends(get_current_user)):
     decisions = await db_manager.client.sessiondecision.find_many(
-        where={"sessionId": session_id, "status": "active"}
+        where={
+            "session": {"is": {"sessionId": session_id}},
+            "status": "active"
+        }
     )
-    return [DecisionModel(**{**d.__dict__, "id": str(d.id)}) for d in decisions]
+    return [
+        DecisionModel(
+            id=str(d.id),
+            sessionId=session_id,
+            category=d.category,
+            decision=d.decision,
+            rationale=getattr(d, "rationale", None),
+            status=d.status,
+            replacedById=getattr(d, "replacedById", None)
+        ) for d in decisions
+    ]
 
 @router.get("/decisions/{session_id}/all", response_model=List[DecisionModel])
 async def list_all_session_decisions(session_id: str, user_token: dict = Depends(get_current_user)):
     """Returns all decisions (active + superseded) for full genealogy view."""
     decisions = await db_manager.client.sessiondecision.find_many(
-        where={"sessionId": session_id},
+        where={"session": {"is": {"sessionId": session_id}}},
         order={"createdAt": "asc"}
     )
-    return [DecisionModel(**{**d.__dict__, "id": str(d.id)}) for d in decisions]
+    return [
+        DecisionModel(
+            id=str(d.id),
+            sessionId=session_id,
+            category=d.category,
+            decision=d.decision,
+            rationale=getattr(d, "rationale", None),
+            status=d.status,
+            replacedById=getattr(d, "replacedById", None)
+        ) for d in decisions
+    ]
 
 class TimelineEntry(BaseModel):
     id: str
@@ -129,9 +152,22 @@ async def get_decision_timeline(user_token: dict = Depends(get_current_user)):
 
 @router.post("/decisions", response_model=DecisionModel)
 async def create_decision(decision: DecisionModel, user_token: dict = Depends(get_current_user)):
-    data = decision.model_dump(exclude={"id"})
-    new_d = await db_manager.client.sessiondecision.create(data=cast(Any, data))
-    return DecisionModel(**{**new_d.__dict__, "id": str(new_d.id)})
+    data = decision.model_dump(exclude={"id", "sessionId"})
+    new_d = await db_manager.client.sessiondecision.create(
+        data=cast(Any, {
+            **data,
+            "session": {"connect": {"sessionId": decision.sessionId}}
+        })
+    )
+    return DecisionModel(
+        id=str(new_d.id),
+        sessionId=decision.sessionId,
+        category=new_d.category,
+        decision=new_d.decision,
+        rationale=getattr(new_d, "rationale", None),
+        status=new_d.status,
+        replacedById=getattr(new_d, "replacedById", None)
+    )
 
 @router.patch("/decisions/{decision_id}/supersede")
 async def supersede_decision(decision_id: str, new_decision_id: str, user_token: dict = Depends(get_current_user)):

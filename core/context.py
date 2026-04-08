@@ -18,6 +18,17 @@ def set_user_context(user_id: str, session_id: Optional[str] = None, config: Dic
         "config": config
     })
 
+def get_user_context() -> Optional[Dict[str, Any]]:
+    ctx = user_context_var.get()
+    if not ctx:
+        return None
+    # Retornar una copia plana donde config esté mezclada para acceso directo (notionToken, etc)
+    merged = ctx.copy()
+    if "config" in merged and isinstance(merged["config"], dict):
+        config_data = merged.pop("config")
+        merged.update(config_data)
+    return merged
+
 def get_user_id() -> Optional[str]:
     ctx = user_context_var.get()
     return ctx.get("user_id") if ctx else None
@@ -49,7 +60,10 @@ async def get_augmented_system_prompt(user_id: str, session_id: Optional[str], a
     decisions = []
     if session_id:
         decisions = await db_manager.client.sessiondecision.find_many(
-            where={"sessionId": session_id, "status": "active"},
+            where={
+                "session": {"is": {"sessionId": session_id}},
+                "status": "active"
+            },
             order={"createdAt": "desc"}
         )
 
@@ -96,7 +110,7 @@ async def log_session_decision(session_id: str, category: str, decision: str, ra
     # 1. Crear la nueva decisión
     new_d = await db_manager.client.sessiondecision.create(
         data={
-            "sessionId": session_id,
+            "session": {"connect": {"sessionId": session_id}},
             "category": category,
             "decision": decision,
             "rationale": rationale,
@@ -107,7 +121,7 @@ async def log_session_decision(session_id: str, category: str, decision: str, ra
     # 2. Invalidar decisiones anteriores en la misma categoría
     await db_manager.client.sessiondecision.update_many(
         where={
-            "sessionId": session_id,
+            "session": {"is": {"sessionId": session_id}},
             "category": category,
             "status": "active",
             "id": {"not": new_d.id}

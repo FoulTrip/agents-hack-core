@@ -5,7 +5,7 @@ prisma==0.15.0
 pyjwt>=2.10.1
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.12
-aiohttp==3.10.8
+aiohttp>=3.11.0
 python-dotenv==1.0.1
 google-genai>=1.56.0
 google-adk==1.27.2

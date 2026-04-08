@@ -46,7 +46,7 @@ class SessionManager:
         """Obtiene la sesión de MongoDB"""
         return await self.db.client.projectsession.find_unique(
             where={"sessionId": session_id},
-            include={"messages": True, "notionPages": True, "githubRepos": True}
+            include={"messages": True, "notionPages": True, "githubRepos": True, "agentActivities": True}
         )
 
     async def list_user_sessions(self, user_id: str):

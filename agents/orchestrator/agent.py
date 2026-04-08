@@ -2,7 +2,7 @@ from google.adk.agents import Agent
 from core.config import settings
 from core.logger import get_logger
 from .prompts import SYSTEM_PROMPT
-from .tools import propose_project_decision
+from .tools import propose_project_decision_tool
 from agents.requirements.agent import create_requirements_agent
 from agents.architecture.agent import create_architecture_agent
 from agents.development.agent import create_development_agent
@@ -24,8 +24,23 @@ async def create_orchestrator(
     logger.debug(f"Creando Orchestrator Agent con el modelo: {model} para usuario {user_id}")
     user_agents = user_agents or []
     
+    from core.llm.dispatcher import MODEL_ALIASES
     from core.context import get_augmented_system_prompt
     
+    # Buscar configuración específica del orquestador si existe
+    my_config = next((a for a in user_agents if getattr(a, "role", "") == "orchestrator"), None)
+    
+    agent_model = model
+    agent_temp = 0.7
+    agent_max_tokens = 4096
+
+    if my_config:
+        if getattr(my_config, "model", None):
+            agent_model = MODEL_ALIASES.get(my_config.model, my_config.model)
+        
+        agent_temp = getattr(my_config, "temperature", 0.7)
+        agent_max_tokens = getattr(my_config, "maxTokens", 4096)
+
     # Aumentar el prompt del orquestador con gobernanza global y decisiones de sesión
     final_instruction = SYSTEM_PROMPT
     if user_id:
@@ -35,7 +50,7 @@ async def create_orchestrator(
     
     return Agent(
         name="orchestrator",
-        model=model,
+        model=agent_model,
         description="Agente principal que coordina todo el sistema de desarrollo",
         instruction=final_instruction,
         sub_agents=[
@@ -46,5 +61,9 @@ async def create_orchestrator(
             await create_documentation_agent(user_agents, model=model, user_id=user_id, session_id=session_id),
             await create_devops_agent(user_agents, model=model, user_id=user_id, session_id=session_id),
         ],
-        tools=[propose_project_decision],
+        tools=[propose_project_decision_tool],
+        generate_content_config={
+            "temperature": agent_temp,
+            "max_output_tokens": agent_max_tokens,
+        },
     )

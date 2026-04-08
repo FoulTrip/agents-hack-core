@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/
+.env
+
+# Cloud & CI
+.gcloudignore
+Dockerfile
+docker-compose.yml
+
+# IDEs
+.vscode/
+.idea/
+
+# Prisma
+prisma/migrations/
+node_modules/

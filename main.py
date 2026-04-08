@@ -26,7 +26,7 @@ async def send_message(runner, session_service, session_id, user_id, message: st
 
 async def create_fresh_session(session_service, user_id: str):
     session = await session_service.create_session(
-        app_name="software-factory",
+        app_name="tripkode-agents",
         user_id=user_id,
     )
     return session
@@ -44,7 +44,7 @@ async def run(user_input: str):
     print("FASE 1 — Generando requerimientos...")
     print("="*50)
     session1 = await create_fresh_session(session_service, user_id)
-    runner1 = Runner(agent=agent, app_name="software-factory", session_service=session_service)
+    runner1 = Runner(agent=agent, app_name="tripkode-agents", session_service=session_service)
     response1 = await send_message(runner1, session_service, session1.id, user_id, user_input)
     print(response1)
 
@@ -52,7 +52,7 @@ async def run(user_input: str):
     print("FASE 2 — Generando arquitectura...")
     print("="*50)
     session2 = await create_fresh_session(session_service, user_id)
-    runner2 = Runner(agent=agent, app_name="software-factory", session_service=session_service)
+    runner2 = Runner(agent=agent, app_name="tripkode-agents", session_service=session_service)
     response2 = await send_message(
         runner2, session_service, session2.id, user_id,
         f"Contexto del proyecto: {user_input}\n\nRequerimientos generados:\n{response1}\n\nProcede con el architecture_agent para diseñar la arquitectura técnica."
@@ -104,7 +104,7 @@ async def run(user_input: str):
     print(response6)
 
     print("\n" + "="*50)
-    print("Pipeline completado. Software Factory finalizado.")
+    print("Pipeline completado. TripKode Agents finalizado.")
     print("="*50)
 
 if __name__ == "__main__":
