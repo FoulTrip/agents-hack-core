@@ -3,6 +3,12 @@ import os
 
 load_dotenv()
 
+
+def _as_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 class Settings:
     GEMINI_API_KEY: str      = os.getenv("GEMINI_API_KEY", "")
     GITHUB_TOKEN: str        = os.getenv("GITHUB_TOKEN", "")
@@ -18,6 +24,11 @@ class Settings:
     GOOGLE_CLOUD_PROJECT: str  = os.getenv("GOOGLE_CLOUD_PROJECT", "")
     GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
     GOOGLE_GENAI_USE_VERTEXAI: str = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "TRUE")
+
+    # Local workspace generation
+    LOCAL_GENERATION_ENABLED: bool = _as_bool(os.getenv("LOCAL_GENERATION_ENABLED", "true"), True)
+    LOCAL_PROJECTS_DIR: str = os.getenv("LOCAL_PROJECTS_DIR", "./generated_projects")
+    NOTION_UPLOAD_ENABLED: bool = _as_bool(os.getenv("NOTION_UPLOAD_ENABLED", "false"), False)
 
     def validate(self):
         required = {

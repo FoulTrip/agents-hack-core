@@ -2,6 +2,7 @@ from google.adk.tools import FunctionTool
 from tools.github.actions import create_multiple_files
 from tools.notion.client import create_page
 from tools.notion import templates
+from tools.local_workspace import sync_project_files_local
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,7 +14,7 @@ def setup_devops_infrastructure(
     deployment_summary: str,
     pipeline_steps: list[str],
     services: list[str],
-) -> str:
+) -> dict:
     """
     Sube la configuración de infraestructura al repositorio y documenta en Notion.
 
@@ -26,31 +27,69 @@ def setup_devops_infrastructure(
         services: Lista de servicios configurados
 
     Returns:
-        Mensaje con resultado de la operación
+        Resultado estructurado de la subida de infraestructura y documentación.
     """
     logger.info(f"Configurando infraestructura para: {project_name}")
+    local_sync = sync_project_files_local(repo_full_name=repo_full_name, files=devops_files)
+    if local_sync.get("enabled"):
+        logger.info(
+            f"Infraestructura guardada localmente: ruta={local_sync.get('local_project_path')} archivos={local_sync.get('written_count')}"
+        )
 
     if "your_username" in repo_full_name or "your_repo_name" in repo_full_name:
         logger.warning(f"⚠️ El Agente DevOps intentó usar un placeholder: {repo_full_name}")
-        return "⚠️ Error: Se está intentando usar un nombre de repositorio de ejemplo (your_username/your_repo_name). Por favor, usa el nombre real del repositorio creado en la fase anterior."
+        return {
+            "success": False,
+            "repo_full_name": repo_full_name,
+            "repo_url": None,
+            "created_files": list(devops_files.keys()) if isinstance(devops_files, dict) else [],
+            "results": [],
+            "notion": None,
+            "local_project_path": local_sync.get("local_project_path"),
+            "local_files_written": local_sync.get("written_count", 0),
+            "local_errors": local_sync.get("errors", []),
+            "error": "placeholder_repo_name",
+            "message": "⚠️ Error: Se está intentando usar un nombre de repositorio de ejemplo (your_username/your_repo_name). Por favor, usa el nombre real del repositorio creado en la fase anterior.",
+        }
 
     try:
-        results = create_multiple_files(
+        upload_result = create_multiple_files(
             repo_full_name=repo_full_name,
             files=devops_files,
             commit_message="ci: add devops infrastructure by DevOps Agent",
+            return_repo_info=True,
         )
+        if isinstance(upload_result, dict):
+            results = upload_result.get("results", [])
+            effective_repo_full_name = upload_result.get("effective_repo_full_name", repo_full_name)
+            effective_repo_url = upload_result.get("effective_repo_url", f"https://github.com/{repo_full_name}" if repo_full_name else None)
+        else:
+            results = upload_result
+            effective_repo_full_name = repo_full_name
+            effective_repo_url = f"https://github.com/{repo_full_name}" if repo_full_name else None
         logger.info(f"Archivos de infraestructura subidos: {len(results)}")
     except Exception as gh_err:
         logger.error(f"❌ Error al subir infraestructura a GitHub: {gh_err}")
-        return f"⚠️ Error al subir archivos DevOps a GitHub: {str(gh_err)}"
+        return {
+            "success": False,
+            "repo_full_name": repo_full_name,
+            "repo_url": f"https://github.com/{repo_full_name}" if repo_full_name else None,
+            "created_files": list(devops_files.keys()) if isinstance(devops_files, dict) else [],
+            "results": [],
+            "notion": None,
+            "local_project_path": local_sync.get("local_project_path"),
+            "local_files_written": local_sync.get("written_count", 0),
+            "local_errors": local_sync.get("errors", []),
+            "error": str(gh_err),
+            "message": f"⚠️ Error al subir archivos DevOps a GitHub: {str(gh_err)}",
+        }
 
     try:
         blocks = [
             templates.heading1(f"DevOps — {project_name}"),
             templates.divider(),
             templates.heading2("Repositorio"),
-            templates.paragraph(f"Repo: {repo_full_name}"),
+            templates.paragraph(f"Repo: {effective_repo_full_name}"),
             templates.divider(),
             templates.heading2("Resumen de despliegue"),
             templates.paragraph(deployment_summary),
@@ -64,10 +103,23 @@ def setup_devops_infrastructure(
             templates.heading2("Archivos generados"),
             *[templates.bullet(r) for r in results],
         ]
-        create_page(title=f"DEVOPS — {project_name}", content_blocks=blocks)
+        notion_result = create_page(title=f"DEVOPS — {project_name}", content_blocks=blocks)
     except Exception as notion_err:
         logger.warning(f"⚠️ No se pudo documentar DevOps en Notion: {notion_err}")
+        notion_result = None
 
-    return f"Infraestructura configurada: {len(results)} archivos subidos."
+    return {
+        "success": True,
+        "repo_full_name": effective_repo_full_name,
+        "repo_url": effective_repo_url,
+        "project_name": project_name,
+        "created_files": list(devops_files.keys()) if isinstance(devops_files, dict) else [],
+        "results": results,
+        "notion": notion_result,
+        "local_project_path": local_sync.get("local_project_path"),
+        "local_files_written": local_sync.get("written_count", 0),
+        "local_errors": local_sync.get("errors", []),
+        "message": f"Infraestructura configurada: {len(results)} archivos subidos.",
+    }
 
 setup_devops_tool = FunctionTool(setup_devops_infrastructure)

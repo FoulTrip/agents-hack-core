@@ -13,7 +13,7 @@ def save_architecture_to_notion(
     data_model: list[str],
     api_endpoints: list[str],
     infrastructure: str
-) -> str:
+) -> dict:
     """
     Guarda el documento de arquitectura técnica en Notion.
 
@@ -27,7 +27,7 @@ def save_architecture_to_notion(
         infrastructure: Descripción de infraestructura
 
     Returns:
-        URL de la página creada en Notion
+        Resultado estructurado de Notion (o fallback markdown).
     """
     logger.info(f"Guardando arquitectura de: {project_name}")
 

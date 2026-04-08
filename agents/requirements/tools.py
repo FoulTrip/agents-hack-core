@@ -12,7 +12,7 @@ def save_requirements_to_notion(
     functional_requirements: list[str],
     non_functional_requirements: list[str],
     main_features: list[str]
-) -> str:
+) -> dict:
     """
     Guarda el documento de requerimientos en Notion.
     
@@ -25,7 +25,7 @@ def save_requirements_to_notion(
         main_features: Lista de funcionalidades principales
     
     Returns:
-        URL de la página creada en Notion, o mensaje de error si falla
+        Resultado estructurado de Notion (o fallback markdown).
     """
     logger.info(f"Guardando requerimientos de: {project_name}")
     

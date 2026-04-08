@@ -83,7 +83,7 @@ async def generate_project(request: dict, user: dict = Depends(get_current_user)
         from app_state import agent_task_cache
         agent_task_cache[session_id] = prompt_req.agentTasks
     
-    return {"session_id": session_id, "status": "started", "websocket_url": f"/ws/{session_id}"}
+    return {"session_id": session_id, "status": "started", "websocket_url": f"/api/ws/{session_id}"}
 
 
 @router.get("/sessions")
@@ -294,15 +294,32 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
             # Recuperar logs persistidos para replay
             persisted_logs = await session_manager.get_pipeline_logs(session_id, limit=500)
+            def build_display_message(log) -> str | None:
+                base_msg = getattr(log, "message", None) or ""
+                detail = getattr(log, "detail", None) or ""
+                log_type = getattr(log, "type", "")
+
+                if log_type == "phase_complete" and detail:
+                    first_line = str(detail).strip().splitlines()[0][:220]
+                    return f"{base_msg} — {first_line}" if base_msg else first_line
+
+                if log_type == "agent_tool_result" and detail:
+                    preview = str(detail).strip().replace("\n", " ")[:220]
+                    return f"{base_msg} — {preview}" if base_msg else preview
+
+                return base_msg or None
+
             serialized_logs = [
                 {
                     "type": log.type,
-                    "message": log.message,
+                    "message": build_display_message(log),
+                    "detail": log.detail,
                     "level": log.level,
                     "phaseId": log.phaseId,
                     "phaseLabel": log.phaseLabel,
                     "agentName": log.agentName,
                     "agentRole": log.agentRole,
+                    "metadata": log.metadata,
                     "createdAt": log.createdAt.isoformat() if log.createdAt else None
                 }
                 for log in persisted_logs

@@ -88,7 +88,7 @@ if __name__ == "__main__":
 ║  • POST /api/generate    - Iniciar pipeline              ║
 ║  • GET  /api/status/{id} - Estado del pipeline            ║
 ║  • GET  /api/sessions   - Listar sesiones                ║
-║  • WS   /ws/{session_id} - WebSocket para updates        ║
+║  • WS   /api/ws/{session_id} - WebSocket para updates    ║
 ║  • GET  /health          - Health check                  ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Ejemplo de uso:                                         ║

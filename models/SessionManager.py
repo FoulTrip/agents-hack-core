@@ -1,4 +1,5 @@
 import uuid
+import json
 from core.db import db_manager
 from typing import Dict, Any, Optional, Callable, List
 from core.logger import get_logger
@@ -155,12 +156,12 @@ class SessionManager:
         metadata: dict | None = None,
     ) -> str:
         """Persiste un log del pipeline en MongoDB para replay al reconectar"""
+        data: dict = {}
         try:
             session = await self.db.client.projectsession.find_unique(where={"sessionId": session_id})
             if not session:
                 return ""
-            data: dict = {
-                "session_id": session.id,
+            data = {
                 "session": {"connect": {"id": session.id}},
                 "type": type,
                 "level": level,
@@ -170,24 +171,31 @@ class SessionManager:
             if detail is not None:
                 data["detail"] = str(detail)[:4000]
             if phase_id is not None:
-                data["phase_id"] = phase_id
+                data["phaseId"] = phase_id
             if phase_label is not None:
-                data["phase_label"] = phase_label
+                data["phaseLabel"] = phase_label
             if agent_name is not None:
-                data["agent_name"] = agent_name
+                data["agentName"] = agent_name
             if agent_role is not None:
-                data["agent_role"] = agent_role
+                data["agentRole"] = agent_role
             
             # Metadata handling
             if metadata is not None:
-                data["metadata"] = metadata
-            else:
-                data["metadata"] = None
+                from prisma import Json
+                try:
+                    # Normaliza a tipos JSON puros para evitar fallos de validación en Prisma.
+                    normalized = json.loads(json.dumps(metadata, default=str))
+                except Exception:
+                    normalized = {"raw": str(metadata)}
+                data["metadata"] = Json(normalized)
 
             log_entry = await self.db.client.pipelinelog.create(data=data)
             return str(log_entry.id)
         except Exception as e:
-            logger.warning(f"⚠️ No se pudo guardar pipeline log ({type}): {e}")
+            logger.warning(
+                f"⚠️ No se pudo guardar pipeline log ({type}) session={session_id} keys={list(data.keys())}: {e}",
+                exc_info=True
+            )
             return ""
 
     async def get_pipeline_logs(self, session_id: str, limit: int = 500) -> list:
