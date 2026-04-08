@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from uvicorn.protocols.utils import ClientDisconnected
 from routers.auth import get_current_user
 from core.db import db_manager
 from core.logger import get_logger
@@ -330,6 +331,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             }
             await websocket.send_json(state_payload)
             logger.info(f"Initial state sent to websocket for session: {session_id} ({len(serialized_logs)} logs replayed, status: {session.status})")
+        except (WebSocketDisconnect, ClientDisconnected) as e:
+            logger.error(f"WebSocket disconnected during initial state send: {e}")
+            session_manager.remove_websocket(session_id, websocket)
+            return
         except Exception as e:
             logger.error(f"Error preparing or sending initial state: {e}", exc_info=True)
             # Intentar enviar un estado básico si el complejo falló
@@ -340,11 +345,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     "status": session.status if 'session' in locals() else "unknown",
                     "error": f"Error parcial al recuperar datos: {str(e)}"
                 })
+            except (WebSocketDisconnect, ClientDisconnected):
+                session_manager.remove_websocket(session_id, websocket)
+                return
             except: pass
-        except (WebSocketDisconnect, Exception) as e:
-            logger.error(f"Error sending initial state: {e}")
-            session_manager.remove_websocket(session_id, websocket)
-            return
 
         while True:
             try:

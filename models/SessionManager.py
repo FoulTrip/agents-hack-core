@@ -160,7 +160,8 @@ class SessionManager:
             if not session:
                 return ""
             data: dict = {
-                "sessionId": session.id,
+                "session_id": session.id,
+                "session": {"connect": {"id": session.id}},
                 "type": type,
                 "level": level,
             }
@@ -169,25 +170,19 @@ class SessionManager:
             if detail is not None:
                 data["detail"] = str(detail)[:4000]
             if phase_id is not None:
-                data["phaseId"] = phase_id
+                data["phase_id"] = phase_id
             if phase_label is not None:
-                data["phaseLabel"] = phase_label
+                data["phase_label"] = phase_label
             if agent_name is not None:
-                data["agentName"] = agent_name
+                data["agent_name"] = agent_name
             if agent_role is not None:
-                data["agentRole"] = agent_role
+                data["agent_role"] = agent_role
             
             # Metadata handling
             if metadata is not None:
-                try:
-                    import json
-                    # Ensure it's a serializable dict
-                    ser = json.dumps(metadata)
-                    data["metadata"] = json.loads(ser)
-                except:
-                    data["metadata"] = {}
+                data["metadata"] = metadata
             else:
-                data["metadata"] = {}
+                data["metadata"] = None
 
             log_entry = await self.db.client.pipelinelog.create(data=data)
             return str(log_entry.id)
