@@ -1,11 +1,13 @@
 import asyncio
 import re
 from typing import Optional
+from pathlib import Path
 from core.db import db_manager
 from core.context import set_user_context
 from core.logger import get_logger
 from models.SessionManager import SessionManager
 from services.budget_guardian import BudgetGuardian, calculate_activity_cost
+from tools.local_workspace import get_project_local_path
 
 logger = get_logger(__name__)
 
@@ -21,6 +23,187 @@ def _normalize_repo_full_name(repo: str | None) -> str | None:
     if normalized.lower().endswith(".git"):
         normalized = normalized[:-4]
     return normalized or None
+
+
+def _summarize_response_for_log(text: str | None, max_len: int = 220) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return "Sin contenido de salida."
+
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    if not lines:
+        return "Sin contenido de salida."
+
+    for line in lines:
+        clean = re.sub(r"^[#>*\-\d\.\)\s]+", "", line).strip()
+        if clean:
+            if len(clean) > max_len:
+                return clean[: max_len - 3] + "..."
+            return clean
+
+    fallback = lines[0]
+    return fallback[: max_len - 3] + "..." if len(fallback) > max_len else fallback
+
+
+def _artifact_type_from_md_relpath(rel_path: str) -> str:
+    rel = rel_path.lower()
+    if "docs/notion/" in rel:
+        if "prd" in rel or "requirement" in rel:
+            return "prd"
+        if "arch" in rel:
+            return "arch"
+        return "notion_doc"
+    if "arch" in rel:
+        return "arch"
+    if "prd" in rel or "requirement" in rel:
+        return "prd"
+    return "docs"
+
+
+async def _sync_local_markdown_artifacts(
+    session_id: str,
+    local_root: Path,
+    title_prefix: str,
+    run_id: str,
+    phase_id: int,
+    phase_label: str,
+) -> int:
+    if not local_root.exists() or not local_root.is_dir():
+        return 0
+
+    session = await session_manager.get_session(session_id)
+    existing_urls = set()
+    if session and hasattr(session, "artifacts") and session.artifacts:
+        existing_urls = {str(a.url) for a in session.artifacts if getattr(a, "url", None)}
+
+    added = 0
+    root_str = str(local_root.resolve())
+    if root_str not in existing_urls:
+        await session_manager.add_artifact(
+            session_id=session_id,
+            type="local_project",
+            title=f"{title_prefix} Workspace",
+            url=root_str,
+        )
+        added += 1
+        existing_urls.add(root_str)
+
+    for md_path in sorted(local_root.rglob("*.md")):
+        abs_path = str(md_path.resolve())
+        if abs_path in existing_urls:
+            continue
+
+        try:
+            rel = md_path.relative_to(local_root).as_posix()
+        except Exception:
+            rel = md_path.name
+
+        content_preview: str | None = None
+        try:
+            content_preview = md_path.read_text(encoding="utf-8")
+            if len(content_preview) > 20000:
+                content_preview = content_preview[:20000] + "\n\n... (truncado)"
+        except Exception:
+            content_preview = None
+
+        await session_manager.add_artifact(
+            session_id=session_id,
+            type=_artifact_type_from_md_relpath(rel),
+            title=f"{title_prefix} — {rel}",
+            url=abs_path,
+            content=content_preview,
+        )
+        added += 1
+        existing_urls.add(abs_path)
+
+    if added:
+        logger.info(
+            f"[run={run_id}] Local artifacts synced phase={phase_id} label={phase_label} source={title_prefix} added={added} root={root_str}"
+        )
+    return added
+
+
+async def _sync_session_local_docs_artifacts(
+    session_id: str,
+    run_id: str,
+    phase_id: int,
+    phase_label: str,
+) -> int:
+    session_repo_ref = f"session/{session_id}"
+    local_root = Path(get_project_local_path(session_repo_ref))
+    return await _sync_local_markdown_artifacts(
+        session_id=session_id,
+        local_root=local_root,
+        title_prefix="Session Docs",
+        run_id=run_id,
+        phase_id=phase_id,
+        phase_label=phase_label,
+    )
+
+
+async def _sync_repo_local_docs_artifacts(
+    session_id: str,
+    repo_full_name: str | None,
+    run_id: str,
+    phase_id: int,
+    phase_label: str,
+) -> int:
+    normalized = _normalize_repo_full_name(repo_full_name)
+    if not normalized:
+        return 0
+    local_root = Path(get_project_local_path(normalized))
+    return await _sync_local_markdown_artifacts(
+        session_id=session_id,
+        local_root=local_root,
+        title_prefix=f"Repo {normalized}",
+        run_id=run_id,
+        phase_id=phase_id,
+        phase_label=phase_label,
+    )
+
+
+def _serialize_session_docs(session_obj: object | None) -> list[dict]:
+    if not session_obj:
+        return []
+
+    docs_payload: list[dict] = []
+
+    try:
+        notion_pages = getattr(session_obj, "notionPages", []) or []
+        for p in notion_pages:
+            docs_payload.append({
+                "id": str(getattr(p, "id", "")),
+                "title": getattr(p, "title", None),
+                "url": getattr(p, "url", None),
+                "pageId": getattr(p, "pageId", None),
+            })
+    except Exception:
+        pass
+
+    try:
+        artifacts = getattr(session_obj, "artifacts", []) or []
+        for a in artifacts:
+            docs_payload.append({
+                "id": str(getattr(a, "id", "")),
+                "type": getattr(a, "type", None),
+                "title": getattr(a, "title", None),
+                "url": getattr(a, "url", None),
+                "content": getattr(a, "content", None),
+                "createdAt": getattr(getattr(a, "createdAt", None), "isoformat", lambda: None)(),
+            })
+    except Exception:
+        pass
+
+    # Dedupe by id/url
+    dedup: list[dict] = []
+    seen: set[str] = set()
+    for d in docs_payload:
+        key = str(d.get("id") or d.get("url") or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        dedup.append(d)
+    return dedup
 
 
 async def _build_phase_agent(
@@ -276,12 +459,53 @@ async def run_pipeline_with_callbacks(
             if phase_id in completed_phases:
                 logger.info(f"[run={run_id}] Saltando fase {phase_id} ({label}) - Ya completada")
                 continue
+
+            # Recuperar lock de repo desde DB al inicio de cada fase por si fue enlazado por tools
+            # (no depender solo del texto generado por el LLM).
+            if "github" in connectors and not locked_repo_full_name:
+                try:
+                    sess_for_lock = await session_manager.get_session(session_id)
+                    repos_for_lock = getattr(sess_for_lock, "githubRepos", []) or []
+                    if repos_for_lock:
+                        maybe_lock = _normalize_repo_full_name(getattr(repos_for_lock[-1], "fullName", None))
+                        if maybe_lock:
+                            locked_repo_full_name = maybe_lock
+                            logger.info(
+                                f"[run={run_id}] Repo lock recuperado desde sesión antes de fase {phase_id}: {locked_repo_full_name}"
+                            )
+                except Exception:
+                    pass
+
+            # Desde fase 4 en adelante no permitimos continuar sin repo oficial.
+            if phase_id >= 4 and "github" in connectors and not locked_repo_full_name:
+                error_msg = (
+                    "❌ No se detectó repositorio oficial tras la fase de desarrollo. "
+                    "Se aborta para evitar subir artefactos a repositorios incorrectos."
+                )
+                logger.error(f"[run={run_id}] {error_msg} phase={phase_id} label={label}")
+                await session_manager.update_session(session_id, status="failed", errorMessage=error_msg)
+                await session_manager.broadcast_to_session(session_id, {
+                    "type": "pipeline_error",
+                    "session_id": session_id,
+                    "error": error_msg,
+                })
+                await session_manager.add_pipeline_log(
+                    session_id=session_id,
+                    type="pipeline_error",
+                    message=error_msg,
+                    phase_id=phase_id,
+                    phase_label=label,
+                    agent_role=agent_role,
+                    level="error",
+                )
+                return
             
             current_phase_config = {
                 k: v for k, v in {
                     "githubToken": user_config.get("githubToken") if "github" in connectors else None,
                     "notionToken": user_config.get("notionToken") if "notion" in connectors else None,
-                    "notionWorkspaceId": user_config.get("notionWorkspaceId") if "notion" in connectors else None
+                    "notionWorkspaceId": user_config.get("notionWorkspaceId") if "notion" in connectors else None,
+                    "lockedRepoFullName": locked_repo_full_name if ("github" in connectors and locked_repo_full_name) else None,
                 }.items() if v is not None
             }
 
@@ -375,6 +599,13 @@ async def run_pipeline_with_callbacks(
                 message = f"{lang_prompt}\n\nOBJETIVO PRINCIPAL DEL PROYECTO:\n{prompt}\n\nFASE ACTUAL: {label}\nINSTRUCCIÓN: Genera los requerimientos iniciales y documéntalos."
             else:
                 message = f"{lang_prompt}\n\nCONTEXTO PROYECTO: {prompt}\n\nRESULTADOS PREVIOS:\n{full_context}\n\nFASE ACTUAL: {label}\nINSTRUCCIÓN CRÍTICA: Eres el responsable de {label}. Procede a ejecutar las herramientas necesarias para completar esta fase (ej. crear repo, subir código, documentar, etc.). NO te limites a charlar, ACTÚA."
+            if agent_role == "development_agent":
+                message += (
+                    "\n\nREQUISITO OBLIGATORIO DE ENTREGA (FASE 3): "
+                    "debes crear/configurar el repositorio oficial y subir una base ejecutable del proyecto "
+                    "(código fuente + archivos de arranque; no solo texto). "
+                    "Si no ejecutas herramientas de GitHub/repositorio, la fase se considera fallida."
+                )
             if "github" in connectors and phase_id >= 4:
                 if locked_repo_full_name:
                     message += (
@@ -519,29 +750,145 @@ async def run_pipeline_with_callbacks(
             logger.info(
                 f"[run={run_id}] Artifact extraction finished phase={phase_id} repo={found_artifacts.get('repoUrl')} locked_repo={locked_repo_full_name} notion={found_artifacts.get('notionDoc', {}).get('url') if found_artifacts.get('notionDoc') else None}"
             )
+
+            synced_session_docs = await _sync_session_local_docs_artifacts(
+                session_id=session_id,
+                run_id=run_id,
+                phase_id=phase_id,
+                phase_label=label,
+            )
+            synced_repo_docs = await _sync_repo_local_docs_artifacts(
+                session_id=session_id,
+                repo_full_name=locked_repo_full_name,
+                run_id=run_id,
+                phase_id=phase_id,
+                phase_label=label,
+            )
+            total_local_artifacts = synced_session_docs + synced_repo_docs
+            if total_local_artifacts > 0:
+                human_msg = f"📁 Artefactos locales detectados: {total_local_artifacts} nuevos elementos."
+                await session_manager.add_pipeline_log(
+                    session_id=session_id,
+                    type="agent_log",
+                    message=human_msg,
+                    phase_id=phase_id,
+                    phase_label=label,
+                    agent_name=label,
+                    agent_role=agent_role,
+                    level="info",
+                )
+                await session_manager.broadcast_to_session(session_id, {
+                    "type": "agent_log",
+                    "phase_id": phase_id,
+                    "phase_label": label,
+                    "logs": [human_msg],
+                })
             
-            await session_manager.add_message(session_id, "assistant", f"Fase {phase_id} ({label}) completada:\n{response_text}")
+            human_summary = _summarize_response_for_log(response_text)
+            await session_manager.add_message(
+                session_id,
+                "assistant",
+                f"Fase {phase_id} ({label}) completada:\n{human_summary}"
+            )
+            session_after_phase = await session_manager.get_session(session_id)
+            docs_payload = _serialize_session_docs(session_after_phase)
+
+            effective_repo_url = found_artifacts.get("repoUrl")
+            if not effective_repo_url and locked_repo_full_name:
+                effective_repo_url = f"https://github.com/{locked_repo_full_name}"
+            if effective_repo_url and not found_artifacts.get("repoUrl"):
+                found_artifacts["repoUrl"] = effective_repo_url
+
+            # Guardia de calidad: si la fase de desarrollo no generó repositorio oficial,
+            # abortamos aquí para evitar que QA/Docs/DevOps suban artefactos sueltos
+            # (tests/docs) a repositorios incorrectos o vacíos.
+            if agent_role == "development_agent" and (not effective_repo_url or not locked_repo_full_name):
+                dev_error = (
+                    "❌ Fase de Desarrollo incompleta: no se detectó repositorio/código base ejecutable. "
+                    "Se detiene el pipeline para evitar generar un repo inválido (solo tests/docs)."
+                )
+                logger.error(
+                    f"[run={run_id}] Development quality gate failed phase={phase_id} "
+                    f"repo_url={effective_repo_url} locked_repo={locked_repo_full_name} response_len={len(response_text or '')}"
+                )
+                await session_manager.update_session(session_id, status="failed", errorMessage=dev_error)
+                await session_manager.broadcast_to_session(session_id, {
+                    "type": "pipeline_error",
+                    "session_id": session_id,
+                    "error": dev_error,
+                })
+                await session_manager.add_pipeline_log(
+                    session_id=session_id,
+                    type="pipeline_error",
+                    message=dev_error,
+                    detail=f"response_len={len(response_text or '')}, repo_url={effective_repo_url}, locked_repo={locked_repo_full_name}",
+                    phase_id=phase_id,
+                    phase_label=label,
+                    agent_role=agent_role,
+                    metadata={"run_id": run_id, "quality_gate": "development_repo_required"},
+                    level="error",
+                )
+                return
+
+            if effective_repo_url and locked_repo_full_name:
+                try:
+                    curr_for_repo_save = await session_manager.get_session(session_id)
+                    repos_saved = getattr(curr_for_repo_save, "githubRepos", []) or []
+                    already_saved = any(
+                        _normalize_repo_full_name(getattr(r, "fullName", None)) == locked_repo_full_name
+                        for r in repos_saved
+                    )
+                    if not already_saved:
+                        await session_manager.link_github_repo(
+                            session_id=session_id,
+                            name=locked_repo_full_name.split("/")[-1],
+                            url=effective_repo_url,
+                            full_name=locked_repo_full_name,
+                        )
+                        logger.info(
+                            f"[run={run_id}] Repo persisted explicitly for session phase={phase_id} repo={locked_repo_full_name}"
+                        )
+                except Exception as repo_save_err:
+                    logger.warning(
+                        f"[run={run_id}] Failed to persist repo link phase={phase_id} repo={locked_repo_full_name}: {repo_save_err}",
+                        exc_info=True
+                    )
             
             await session_manager.broadcast_to_session(session_id, {
                 "type": "phase_complete",
                 "phase_id": phase_id,
                 "phase_label": label,
-                "logs": [f"✅ Fase {phase_id} completada", response_text],
-                "message": response_text,
-                "repoUrl": found_artifacts.get("repoUrl"),
+                "logs": [f"✅ Fase {phase_id} completada", f"📝 {human_summary}"],
+                "message": human_summary,
+                "fullResponse": response_text,
+                "repoUrl": effective_repo_url,
                 "notionDoc": found_artifacts.get("notionDoc"),
+                "docs": docs_payload,
+                "repoFullName": locked_repo_full_name,
+                "repoRefreshAt": datetime.now().isoformat(),
                 "done": True
             })
+            if effective_repo_url:
+                await session_manager.broadcast_to_session(session_id, {
+                    "type": "repo_update",
+                    "phase_id": phase_id,
+                    "phase_label": label,
+                    "repoUrl": effective_repo_url,
+                    "repoFullName": locked_repo_full_name,
+                    "refreshAt": datetime.now().isoformat(),
+                })
             await session_manager.add_pipeline_log(
                 session_id=session_id, type="phase_complete",
                 message=f"✅ Fase {phase_id} ({label}) completada",
-                detail=response_text,
+                detail=human_summary,
                 phase_id=phase_id, phase_label=label, agent_role=agent_role,
                 metadata={
                     "input_tokens": in_tok, "output_tokens": out_tok,
                     "duration_ms": duration, "cost": task_cost,
-                    "repo_url": found_artifacts.get("repoUrl"),
-                    "notion_url": found_artifacts.get("notionDoc", {}).get("url") if found_artifacts.get("notionDoc") else None
+                    "repo_url": effective_repo_url,
+                    "notion_url": found_artifacts.get("notionDoc", {}).get("url") if found_artifacts.get("notionDoc") else None,
+                    "response_chars": len(response_text or ""),
+                    "local_artifacts_added": total_local_artifacts,
                 },
                 level="info"
             )
@@ -560,6 +907,9 @@ async def run_pipeline_with_callbacks(
             )
         
         final_result = {"prompt": prompt, "phases_completed": len(phases)}
+        if locked_repo_full_name:
+            final_result["repoFullName"] = locked_repo_full_name
+            final_result["repoUrl"] = f"https://github.com/{locked_repo_full_name}"
         await session_manager.update_session(session_id, status="completed", currentPhase=None)
         await session_manager.broadcast_to_session(session_id, {"type": "pipeline_complete", "session_id": session_id, "result": final_result})
         await session_manager.add_pipeline_log(

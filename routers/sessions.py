@@ -10,6 +10,48 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["sessions"])
 
 
+def _trim_text(value: str | None, max_len: int = 240) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) > max_len:
+        return text[: max_len - 3] + "..."
+    return text
+
+
+def _humanize_log_message(log_type: str, message: str | None, detail: str | None) -> str | None:
+    base = _trim_text(message, 220) or ""
+    det = str(detail or "").strip()
+
+    if log_type == "phase_complete":
+        first_line = ""
+        if det:
+            first_line = _trim_text(det.splitlines()[0], 220) or ""
+        if base and first_line:
+            return f"{base} — {first_line}"
+        return base or first_line or "Fase completada"
+
+    if log_type in {"agent_log", "agent_tool_result"} and det:
+        preview = _trim_text(" ".join(det.split()), 220) or ""
+        if base and preview:
+            return f"{base} — {preview}"
+        return base or preview
+
+    return base or None
+
+
+def _humanize_log_detail(log_type: str, detail: str | None) -> str | None:
+    det = _trim_text(detail, 4000)
+    if not det:
+        return None
+    # Evita que el replay en frontend pinte ensayos largos como si fueran logs.
+    if log_type in {"phase_complete", "agent_log", "agent_tool_result"}:
+        return _trim_text(" ".join(det.split()), 320)
+    return _trim_text(det, 600)
+
+
 @router.post("/generate")
 async def generate_project(request: dict, user: dict = Depends(get_current_user)):
     """Inicia un nuevo pipeline de generación de proyecto"""
@@ -98,6 +140,18 @@ async def get_status(session_id: str):
     """Obtiene el estado de una sesión"""
     session = await session_manager.get_session(session_id)
     if not session: raise HTTPException(status_code=404, detail="Sesión no encontrada")
+
+    try:
+        for msg in getattr(session, "messages", []) or []:
+            content = getattr(msg, "content", None)
+            role = getattr(msg, "role", None)
+            if role == "assistant" and isinstance(content, str) and content.startswith("Fase "):
+                first, _, rest = content.partition("\n")
+                preview = _trim_text(rest.splitlines()[0] if rest else "", 220) or ""
+                msg.content = f"{first}\n{preview}" if preview else first
+    except Exception:
+        pass
+
     return session
 
 
@@ -197,8 +251,8 @@ async def get_session_logs(session_id: str, limit: int = 500, user: dict = Depen
         {
             "id": str(log.id),
             "type": log.type,
-            "message": log.message,
-            "detail": log.detail,
+            "message": _humanize_log_message(log.type, log.message, log.detail),
+            "detail": _humanize_log_detail(log.type, log.detail),
             "level": log.level,
             "phaseId": log.phaseId,
             "phaseLabel": log.phaseLabel,
@@ -238,10 +292,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         session_manager.add_websocket(session_id, websocket, user_id=user_id_ws)
         
         def serialize_message(msg) -> dict:
+            content = msg.content
+            # Evita rehidratar respuestas gigantes en sesiones antiguas cuando solo se requiere contexto humano.
+            if msg.role == "assistant" and isinstance(content, str) and content.startswith("Fase "):
+                first, _, rest = content.partition("\n")
+                preview = _trim_text(rest.splitlines()[0] if rest else "", 220) or ""
+                content = f"{first}\n{preview}" if preview else first
+
             return {
                 "id": str(msg.id),
                 "role": msg.role,
-                "content": msg.content,
+                "content": content,
                 "createdAt": msg.createdAt.isoformat() if msg.createdAt else None
             }
 
@@ -294,26 +355,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
             # Recuperar logs persistidos para replay
             persisted_logs = await session_manager.get_pipeline_logs(session_id, limit=500)
-            def build_display_message(log) -> str | None:
-                base_msg = getattr(log, "message", None) or ""
-                detail = getattr(log, "detail", None) or ""
-                log_type = getattr(log, "type", "")
-
-                if log_type == "phase_complete" and detail:
-                    first_line = str(detail).strip().splitlines()[0][:220]
-                    return f"{base_msg} — {first_line}" if base_msg else first_line
-
-                if log_type == "agent_tool_result" and detail:
-                    preview = str(detail).strip().replace("\n", " ")[:220]
-                    return f"{base_msg} — {preview}" if base_msg else preview
-
-                return base_msg or None
 
             serialized_logs = [
                 {
                     "type": log.type,
-                    "message": build_display_message(log),
-                    "detail": log.detail,
+                    "message": _humanize_log_message(log.type, log.message, log.detail),
+                    "detail": _humanize_log_detail(log.type, log.detail),
                     "level": log.level,
                     "phaseId": log.phaseId,
                     "phaseLabel": log.phaseLabel,

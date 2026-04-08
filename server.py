@@ -78,7 +78,16 @@ app.include_router(recon_router)
 # ===========================================
 
 if __name__ == "__main__":
+    import asyncio
+    import sys
     import uvicorn
+    
+    # Evita ruido frecuente de Proactor en Windows (WinError 10054) al cerrar sockets.
+    if sys.platform.startswith("win"):
+        try:
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # type: ignore[attr-defined]
+        except Exception:
+            pass
     
     print("""
 ╔══════════════════════════════════════════════════════════╗

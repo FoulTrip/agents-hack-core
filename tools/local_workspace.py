@@ -6,6 +6,7 @@ from typing import Dict, Any
 
 from core.config import settings
 from core.logger import get_logger
+from tools.file_map import flatten_files_payload
 
 logger = get_logger(__name__)
 
@@ -49,13 +50,28 @@ def get_project_local_path(repo_full_name: str) -> str:
 
 
 def _safe_relative_path(path: str) -> str | None:
-    normalized = (path or "").replace("\\", "/").strip().lstrip("/")
+    normalized = (path or "").replace("\\", "/").strip()
+    # Algunos outputs de agentes llegan con comillas envolventes:
+    # e.g. "\"backend/Dockerfile\"" o "'docs/README.md'".
+    normalized = normalized.strip("\"'").lstrip("/")
     if not normalized:
         return None
-    parts = [p for p in normalized.split("/") if p not in ("", ".")]
-    if any(part == ".." for part in parts):
+    raw_parts = [p for p in normalized.split("/") if p not in ("", ".")]
+    safe_parts: list[str] = []
+    for part in raw_parts:
+        cleaned = (part or "").strip().strip("\"'")
+        if not cleaned:
+            continue
+        if cleaned == "..":
+            return None
+        # Evita caracteres inválidos para rutas en Windows.
+        cleaned = re.sub(r'[<>:"|?*]', "-", cleaned)
+        cleaned = cleaned.rstrip(" .")
+        if cleaned:
+            safe_parts.append(cleaned)
+    if not safe_parts:
         return None
-    return "/".join(parts)
+    return "/".join(safe_parts)
 
 
 def sync_project_files_local(repo_full_name: str, files: dict) -> Dict[str, Any]:
@@ -84,7 +100,11 @@ def sync_project_files_local(repo_full_name: str, files: dict) -> Dict[str, Any]
             "errors": ["'files' no es un diccionario válido"],
         }
 
-    for raw_path, raw_content in files.items():
+    normalized_files = flatten_files_payload(files)
+    if not normalized_files and files:
+        errors.append("No se encontraron archivos válidos para escribir (payload anidado o vacío).")
+
+    for raw_path, raw_content in normalized_files.items():
         safe_rel = _safe_relative_path(str(raw_path))
         if not safe_rel:
             errors.append(f"Ruta inválida omitida: {raw_path}")
@@ -95,8 +115,8 @@ def sync_project_files_local(repo_full_name: str, files: dict) -> Dict[str, Any]
             errors.append(f"Ruta fuera de workspace omitida: {raw_path}")
             continue
 
-        target.parent.mkdir(parents=True, exist_ok=True)
         try:
+            target.parent.mkdir(parents=True, exist_ok=True)
             content = raw_content if isinstance(raw_content, str) else str(raw_content)
             target.write_text(content, encoding="utf-8")
             written_files.append(safe_rel)

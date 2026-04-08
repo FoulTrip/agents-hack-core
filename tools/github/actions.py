@@ -1,6 +1,8 @@
 from github import GithubException
 from tools.github.client import get_github_client, get_authenticated_user
 from core.logger import get_logger
+from core.context import get_user_context
+from tools.file_map import flatten_files_payload
 import base64
 
 logger = get_logger(__name__)
@@ -13,6 +15,36 @@ def _normalize_repo_full_name(repo_full_name: str) -> str:
     if raw.lower().endswith(".git"):
         raw = raw[:-4]
     return raw
+
+
+def _resolve_effective_repo_full_name(repo_full_name: str) -> str:
+    requested = _normalize_repo_full_name(repo_full_name)
+    ctx = get_user_context() or {}
+    forced = _normalize_repo_full_name(ctx.get("lockedRepoFullName") or "")
+    if forced:
+        if requested and requested != forced:
+            logger.warning(
+                f"Repo solicitado {requested} sobrescrito por repo oficial bloqueado de sesión: {forced}"
+            )
+        return forced
+    return requested
+
+
+def _safe_repo_path(file_path: str) -> str | None:
+    raw = (file_path or "").replace("\\", "/").strip().strip("\"'").lstrip("/")
+    if not raw:
+        return None
+    parts: list[str] = []
+    for piece in raw.split("/"):
+        part = (piece or "").strip().strip("\"'")
+        if not part or part == ".":
+            continue
+        if part == "..":
+            return None
+        parts.append(part)
+    if not parts:
+        return None
+    return "/".join(parts)
 
 
 def create_repository(repo_name: str, description: str, private: bool = False) -> dict:
@@ -43,7 +75,7 @@ def create_repository(repo_name: str, description: str, private: bool = False) -
 def create_file(repo_full_name: str, file_path: str, content: str, commit_message: str) -> str:
     import time
     client = get_github_client()
-    repo_full_name = _normalize_repo_full_name(repo_full_name)
+    repo_full_name = _resolve_effective_repo_full_name(repo_full_name)
     
     # Retry logic for 404 - sometimes GitHub takes a second to propagate new repo
     repo = None
@@ -58,25 +90,29 @@ def create_file(repo_full_name: str, file_path: str, content: str, commit_messag
                 continue
             raise
     
-    logger.debug(f"Creando archivo: {file_path} en {repo_full_name}")
+    safe_path = _safe_repo_path(file_path)
+    if not safe_path:
+        raise ValueError(f"Ruta de archivo inválida para GitHub: {file_path}")
+
+    logger.debug(f"Creando archivo: {safe_path} en {repo_full_name}")
     
     try:
         repo.create_file(
-            path=file_path,
+            path=safe_path,
             message=commit_message,
             content=content,
         )
-        return f"Archivo {file_path} creado exitosamente"
+        return f"Archivo {safe_path} creado exitosamente"
     except GithubException as e:
         if e.status == 422:
-            contents = repo.get_contents(file_path)
+            contents = repo.get_contents(safe_path)
             repo.update_file(
-                path=file_path,
+                path=safe_path,
                 message=f"update: {commit_message}",
                 content=content,
                 sha=contents.sha,
             )
-            return f"Archivo {file_path} actualizado exitosamente"
+            return f"Archivo {safe_path} actualizado exitosamente"
         raise
 
 def create_multiple_files(
@@ -92,7 +128,17 @@ def create_multiple_files(
     client = get_github_client()
     user = get_authenticated_user()
     
-    effective_repo_full_name = _normalize_repo_full_name(repo_full_name)
+    effective_repo_full_name = _resolve_effective_repo_full_name(repo_full_name)
+    normalized_files = flatten_files_payload(files)
+    if not normalized_files:
+        logger.warning(f"No hay archivos válidos para subir a GitHub en repo {effective_repo_full_name}")
+        if return_repo_info:
+            return {
+                "results": [],
+                "effective_repo_full_name": effective_repo_full_name,
+                "effective_repo_url": f"https://github.com/{effective_repo_full_name}",
+            }
+        return []
 
     # Check if repo exists, if not, try to create it
     try:
@@ -136,8 +182,12 @@ def create_multiple_files(
             raise
     
     results = []
-    for file_path, content in files.items():
-        result = create_file(effective_repo_full_name, file_path, content, commit_message)
+    for file_path, content in normalized_files.items():
+        safe_path = _safe_repo_path(file_path)
+        if not safe_path:
+            logger.warning(f"Ruta inválida omitida al subir a GitHub: {file_path}")
+            continue
+        result = create_file(effective_repo_full_name, safe_path, content, commit_message)
         results.append(result)
     if return_repo_info:
         return {
