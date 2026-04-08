@@ -36,6 +36,11 @@ async def extract_and_link_artifacts(session_id: str, text: str, user_config: di
             url=repo_url,
             full_name=repo
         )
+    if repo_url:
+        logger.info(f"🚀 Repositorio detectado y vinculado: {repo_url}")
+    if last_notion_url:
+        logger.info(f"📄 Documento Notion detectado: {last_notion_url}")
+        
     return {"repoUrl": repo_url, "notionDoc": {"url": last_notion_url, "title": "Página de la Fase"} if last_notion_url else None}
 
 
@@ -122,6 +127,11 @@ async def run_pipeline_with_callbacks(
         "prompt": prompt,
         "resumed": len(completed_phases) > 0
     })
+    await session_manager.add_pipeline_log(
+        session_id=session_id, type="pipeline_start",
+        message=f"🚀 Pipeline iniciado{' (retomado)' if completed_phases else ''}. Prompt: {prompt[:100]}",
+        metadata={"resumed": len(completed_phases) > 0, "prompt_length": len(prompt)}
+    )
     
     try:
         user_db = await db_manager.client.user.find_unique(where={"id": user_id_internal})
@@ -196,6 +206,11 @@ async def run_pipeline_with_callbacks(
             set_user_context(user_id_internal, session_id, current_phase_config)
 
             # 1. Verificar Presupuesto antes de cada fase (🛑 Bloqueo Activo)
+            await session_manager.add_pipeline_log(
+                session_id=session_id, type="budget_check",
+                message=f"💰 Verificando presupuesto antes de fase {phase_id} ({label})",
+                phase_id=phase_id, phase_label=label, level="debug"
+            )
             authorized = await BudgetGuardian.check_budget_authorization(user_id_internal)
             if not authorized:
                 error_msg = "🚨 EJECUCIÓN SUSPENDIDA: Se ha alcanzado el límite de presupuesto diario."
@@ -205,28 +220,43 @@ async def run_pipeline_with_callbacks(
                     "error": error_msg,
                     "code": "BUDGET_EXCEEDED"
                 })
+                await session_manager.add_pipeline_log(
+                    session_id=session_id, type="pipeline_error",
+                    message=error_msg, level="error",
+                    phase_id=phase_id, phase_label=label,
+                    metadata={"code": "BUDGET_EXCEEDED"}
+                )
                 return
 
             # 2. Human-in-the-Loop: Puntos de Control y Aprobación
             # Automatizamos que el Agente de Arquitectura siempre pida aprobación antes de seguir
             if agent_role == "architecture_agent":
                 await session_manager.update_session(session_id, status="awaiting_approval")
+                approval_msg = "🏗️ Arquitectura generada. Por favor, revisa y aprueba para continuar con el desarrollo."
                 await session_manager.broadcast_to_session(session_id, {
                     "type": "awaiting_approval",
                     "phase": label,
-                    "message": "🏗️ Arquitectura generada. Por favor, revisa y aprueba para continuar con el desarrollo."
+                    "message": approval_msg
                 })
-                
+                await session_manager.add_pipeline_log(
+                    session_id=session_id, type="awaiting_approval",
+                    message=approval_msg, phase_id=phase_id, phase_label=label, level="info"
+                )
+
                 # Bucle de espera hasta que el estado cambie a "approved" o el proceso se cancele
                 while True:
                     await asyncio.sleep(2)
                     sess = await session_manager.get_session(session_id)
                     if not sess or sess.status == "failed": return
                     if sess.status == "approved":
-                        # Volvemos a "working" y seguimos
                         await session_manager.update_session(session_id, status="working")
+                        await session_manager.add_pipeline_log(
+                            session_id=session_id, type="hitl_approved",
+                            message="✅ Arquitectura aprobada por el usuario. Continuando con el desarrollo.",
+                            phase_id=phase_id, phase_label=label, level="info"
+                        )
                         break
-                    if sess.status == "working": break # Alguien lo cambió manualmente
+                    if sess.status == "working": break
 
             await session_manager.broadcast_to_session(session_id, {
                 "type": "phase_start",
@@ -234,13 +264,19 @@ async def run_pipeline_with_callbacks(
                 "phase_label": label,
                 "logs": [header]
             })
+            await session_manager.add_pipeline_log(
+                session_id=session_id, type="phase_start",
+                message=header, phase_id=phase_id, phase_label=label,
+                agent_role=agent_role, level="info"
+            )
             
-            full_context = "\n\n".join([f"PHASE {k+1} RESPONSE:\n{resp}" for k, resp in responses.items()])
-            lang_prompt = f"IMPORTANTE: Toda la comunicación, documentación y resultados deben ser en {language_name}."
+            full_context = "\n\n".join([f"RESULTADO FASE {k+1}:\n{resp}" for k, resp in responses.items()])
+            lang_prompt = f"IMPORTANTE: Ejecuta tu tarea y responde ÚNICAMENTE en {language_name}."
+            
             if i == 0:
-                message = f"{lang_prompt}\n\nOBJETIVO PRINCIPAL:\n{prompt}"
+                message = f"{lang_prompt}\n\nOBJETIVO PRINCIPAL DEL PROYECTO:\n{prompt}\n\nFASE ACTUAL: {label}\nINSTRUCCIÓN: Genera los requerimientos iniciales y documéntalos."
             else:
-                message = f"{lang_prompt}\n\nContexto: {prompt}\n\nResultados previos:\n{full_context}\n\nProcede con {label}."
+                message = f"{lang_prompt}\n\nCONTEXTO PROYECTO: {prompt}\n\nRESULTADOS PREVIOS:\n{full_context}\n\nFASE ACTUAL: {label}\nINSTRUCCIÓN CRÍTICA: Eres el responsable de {label}. Procede a ejecutar las herramientas necesarias para completar esta fase (ej. crear repo, subir código, documentar, etc.). NO te limites a charlar, ACTÚA."
 
             start_t = datetime.now()
 
@@ -267,7 +303,11 @@ async def run_pipeline_with_callbacks(
                 user_id=user_id_internal,
                 session_id=session.id,
                 message=message,
-                preferred_model=preferred_model
+                preferred_model=preferred_model,
+                pipeline_session_id=session_id,  # UUID real del pipeline para logs
+                phase_id=phase_id,
+                phase_label=label,
+                agent_role=agent_role,
             )
             
             # Calcular costo real para esta tarea
@@ -330,6 +370,19 @@ async def run_pipeline_with_callbacks(
                 "notionDoc": found_artifacts.get("notionDoc"),
                 "done": True
             })
+            await session_manager.add_pipeline_log(
+                session_id=session_id, type="phase_complete",
+                message=f"✅ Fase {phase_id} ({label}) completada",
+                detail=response_text,
+                phase_id=phase_id, phase_label=label, agent_role=agent_role,
+                metadata={
+                    "input_tokens": in_tok, "output_tokens": out_tok,
+                    "duration_ms": duration, "cost": task_cost,
+                    "repo_url": found_artifacts.get("repoUrl"),
+                    "notion_url": found_artifacts.get("notionDoc", {}).get("url") if found_artifacts.get("notionDoc") else None
+                },
+                level="info"
+            )
             
             curr_db_sess = await session_manager.get_session(session_id)
             prev_completed = getattr(curr_db_sess, "completedPhases", [])
@@ -344,14 +397,25 @@ async def run_pipeline_with_callbacks(
         final_result = {"prompt": prompt, "phases_completed": len(phases)}
         await session_manager.update_session(session_id, status="completed", currentPhase=None)
         await session_manager.broadcast_to_session(session_id, {"type": "pipeline_complete", "session_id": session_id, "result": final_result})
+        await session_manager.add_pipeline_log(
+            session_id=session_id, type="pipeline_complete",
+            message=f"🏁 Pipeline completado. {len(phases)} fases ejecutadas.",
+            metadata={"phases_completed": len(phases)}, level="info"
+        )
         
     except Exception as e:
         import traceback
         error_msg = str(e)
+        tb = traceback.format_exc()
         logger.error(f"❌ Error en pipeline: {error_msg}")
-        logger.error(traceback.format_exc())
+        logger.error(tb)
         await session_manager.update_session(session_id, status="failed", errorMessage=error_msg)
         await session_manager.broadcast_to_session(session_id, {"type": "pipeline_error", "session_id": session_id, "error": error_msg})
-        
+        await session_manager.add_pipeline_log(
+            session_id=session_id, type="pipeline_error",
+            message=f"❌ Error fatal en pipeline: {error_msg}",
+            detail=tb, level="error"
+        )
+
         if webhook_url:
             await session_manager.send_webhook(webhook_url, {"event": "pipeline_complete", "session_id": session_id, "error": error_msg})

@@ -28,35 +28,37 @@ def save_tests_to_repository(
     """
     logger.info(f"Subiendo tests para: {project_name}")
 
-    results = create_multiple_files(
-        repo_full_name=repo_full_name,
-        files=test_files,
-        commit_message="test: add test suite by QA Agent",
-    )
+    try:
+        results = create_multiple_files(
+            repo_full_name=repo_full_name,
+            files=test_files,
+            commit_message="test: add test suite by QA Agent",
+        )
+        logger.info(f"Archivos de test subidos: {len(results)}")
+    except Exception as gh_err:
+        logger.error(f"❌ Error al subir tests a GitHub: {gh_err}")
+        return f"⚠️ Error al subir tests a GitHub: {str(gh_err)}"
 
-    logger.info(f"Archivos de test subidos: {len(results)}")
+    try:
+        blocks = [
+            templates.heading1(f"QA — {project_name}"),
+            templates.divider(),
+            templates.heading2("Repositorio"),
+            templates.paragraph(f"Repo: {repo_full_name}"),
+            templates.divider(),
+            templates.heading2("Coverage esperado"),
+            templates.paragraph(coverage_summary),
+            templates.divider(),
+            templates.heading2("Casos de prueba"),
+            *[templates.bullet(case) for case in test_cases_summary],
+            templates.divider(),
+            templates.heading2("Archivos generados"),
+            *[templates.bullet(r) for r in results],
+        ]
+        create_page(title=f"QA — {project_name}", content_blocks=blocks)
+    except Exception as notion_err:
+        logger.warning(f"⚠️ No se pudo documentar QA en Notion: {notion_err}")
 
-    blocks = [
-        templates.heading1(f"QA — {project_name}"),
-        templates.divider(),
-        templates.heading2("Repositorio"),
-        templates.paragraph(f"Repo: {repo_full_name}"),
-        templates.divider(),
-        templates.heading2("Coverage esperado"),
-        templates.paragraph(coverage_summary),
-        templates.divider(),
-        templates.heading2("Casos de prueba"),
-        *[templates.bullet(case) for case in test_cases_summary],
-        templates.divider(),
-        templates.heading2("Archivos generados"),
-        *[templates.bullet(r) for r in results],
-    ]
-
-    create_page(
-        title=f"QA — {project_name}",
-        content_blocks=blocks
-    )
-
-    return f"Tests subidos al repositorio: {len(results)} archivos. Documentado en Notion."
+    return f"Tests subidos al repositorio: {len(results)} archivos."
 
 save_tests_tool = FunctionTool(save_tests_to_repository)

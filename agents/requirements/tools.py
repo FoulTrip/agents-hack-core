@@ -25,34 +25,47 @@ def save_requirements_to_notion(
         main_features: Lista de funcionalidades principales
     
     Returns:
-        URL de la página creada en Notion
+        URL de la página creada en Notion, o mensaje de error si falla
     """
     logger.info(f"Guardando requerimientos de: {project_name}")
     
-    blocks = [
-        templates.heading1(f"Requerimientos — {project_name}"),
-        templates.divider(),
-        templates.heading2("Resumen del proyecto"),
-        templates.paragraph(summary),
-        templates.divider(),
-        templates.heading2("Historias de usuario"),
-        *[templates.bullet(story) for story in user_stories],
-        templates.divider(),
-        templates.heading2("Requerimientos funcionales"),
-        *[templates.bullet(req) for req in functional_requirements],
-        templates.divider(),
-        templates.heading2("Requerimientos no funcionales"),
-        *[templates.bullet(req) for req in non_functional_requirements],
-        templates.divider(),
-        templates.heading2("Funcionalidades principales"),
-        *[templates.bullet(feature) for feature in main_features],
-    ]
+    try:
+        blocks = [
+            templates.heading1(f"Requerimientos — {project_name}"),
+            templates.divider(),
+            templates.heading2("Resumen del proyecto"),
+            templates.paragraph(summary),
+            templates.divider(),
+            templates.heading2("Historias de usuario"),
+            *[templates.bullet(story) for story in user_stories],
+            templates.divider(),
+            templates.heading2("Requerimientos funcionales"),
+            *[templates.bullet(req) for req in functional_requirements],
+            templates.divider(),
+            templates.heading2("Requerimientos no funcionales"),
+            *[templates.bullet(req) for req in non_functional_requirements],
+            templates.divider(),
+            templates.heading2("Funcionalidades principales"),
+            *[templates.bullet(feature) for feature in main_features],
+        ]
+        
+        page = create_page(
+            title=f"PRD — {project_name}",
+            content_blocks=blocks
+        )
+        
+        return page
     
-    page = create_page(
-        title=f"PRD — {project_name}",
-        content_blocks=blocks
-    )
-    
-    return f"Requerimientos guardados exitosamente en Notion: {page['url']}"
+    except Exception as e:
+        logger.error(f"❌ Error inesperado al guardar requerimientos en Notion: {e}")
+        from tools.notion.templates import blocks_to_markdown
+        return {
+            "success": False,
+            "url": None,
+            "page_id": None,
+            "markdown": blocks_to_markdown(blocks),
+            "error": str(e)
+        }
+
 
 save_requirements_tool = FunctionTool(save_requirements_to_notion)

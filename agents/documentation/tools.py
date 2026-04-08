@@ -28,35 +28,37 @@ def save_documentation(
     """
     logger.info(f"Generando documentación para: {project_name}")
 
-    results = create_multiple_files(
-        repo_full_name=repo_full_name,
-        files=doc_files,
-        commit_message="docs: add full documentation by Documentation Agent",
-    )
+    try:
+        results = create_multiple_files(
+            repo_full_name=repo_full_name,
+            files=doc_files,
+            commit_message="docs: add full documentation by Documentation Agent",
+        )
+        logger.info(f"Archivos de documentación subidos: {len(results)}")
+    except Exception as gh_err:
+        logger.error(f"❌ Error al subir documentación a GitHub: {gh_err}")
+        return f"⚠️ Error al subir documentación a GitHub: {str(gh_err)}"
 
-    logger.info(f"Archivos de documentación subidos: {len(results)}")
+    try:
+        blocks = [
+            templates.heading1(f"Documentación — {project_name}"),
+            templates.divider(),
+            templates.heading2("Repositorio"),
+            templates.paragraph(f"Repo: {repo_full_name}"),
+            templates.divider(),
+            templates.heading2("Endpoints documentados"),
+            *[templates.bullet(ep) for ep in api_endpoints_summary],
+            templates.divider(),
+            templates.heading2("Pasos de instalación"),
+            *[templates.bullet(step) for step in setup_steps],
+            templates.divider(),
+            templates.heading2("Archivos generados"),
+            *[templates.bullet(r) for r in results],
+        ]
+        create_page(title=f"DOCS — {project_name}", content_blocks=blocks)
+    except Exception as notion_err:
+        logger.warning(f"⚠️ No se pudo documentar en Notion: {notion_err}")
 
-    blocks = [
-        templates.heading1(f"Documentación — {project_name}"),
-        templates.divider(),
-        templates.heading2("Repositorio"),
-        templates.paragraph(f"Repo: {repo_full_name}"),
-        templates.divider(),
-        templates.heading2("Endpoints documentados"),
-        *[templates.bullet(ep) for ep in api_endpoints_summary],
-        templates.divider(),
-        templates.heading2("Pasos de instalación"),
-        *[templates.bullet(step) for step in setup_steps],
-        templates.divider(),
-        templates.heading2("Archivos generados"),
-        *[templates.bullet(r) for r in results],
-    ]
-
-    create_page(
-        title=f"DOCS — {project_name}",
-        content_blocks=blocks
-    )
-
-    return f"Documentación subida al repositorio: {len(results)} archivos. Documentado en Notion."
+    return f"Documentación subida al repositorio: {len(results)} archivos."
 
 save_documentation_tool = FunctionTool(save_documentation)

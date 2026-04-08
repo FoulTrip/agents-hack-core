@@ -30,38 +30,44 @@ def setup_devops_infrastructure(
     """
     logger.info(f"Configurando infraestructura para: {project_name}")
 
-    results = create_multiple_files(
-        repo_full_name=repo_full_name,
-        files=devops_files,
-        commit_message="ci: add devops infrastructure by DevOps Agent",
-    )
+    if "your_username" in repo_full_name or "your_repo_name" in repo_full_name:
+        logger.warning(f"⚠️ El Agente DevOps intentó usar un placeholder: {repo_full_name}")
+        return "⚠️ Error: Se está intentando usar un nombre de repositorio de ejemplo (your_username/your_repo_name). Por favor, usa el nombre real del repositorio creado en la fase anterior."
 
-    logger.info(f"Archivos de infraestructura subidos: {len(results)}")
+    try:
+        results = create_multiple_files(
+            repo_full_name=repo_full_name,
+            files=devops_files,
+            commit_message="ci: add devops infrastructure by DevOps Agent",
+        )
+        logger.info(f"Archivos de infraestructura subidos: {len(results)}")
+    except Exception as gh_err:
+        logger.error(f"❌ Error al subir infraestructura a GitHub: {gh_err}")
+        return f"⚠️ Error al subir archivos DevOps a GitHub: {str(gh_err)}"
 
-    blocks = [
-        templates.heading1(f"DevOps — {project_name}"),
-        templates.divider(),
-        templates.heading2("Repositorio"),
-        templates.paragraph(f"Repo: {repo_full_name}"),
-        templates.divider(),
-        templates.heading2("Resumen de despliegue"),
-        templates.paragraph(deployment_summary),
-        templates.divider(),
-        templates.heading2("Servicios configurados"),
-        *[templates.bullet(service) for service in services],
-        templates.divider(),
-        templates.heading2("Pipeline CI/CD"),
-        *[templates.bullet(step) for step in pipeline_steps],
-        templates.divider(),
-        templates.heading2("Archivos generados"),
-        *[templates.bullet(r) for r in results],
-    ]
+    try:
+        blocks = [
+            templates.heading1(f"DevOps — {project_name}"),
+            templates.divider(),
+            templates.heading2("Repositorio"),
+            templates.paragraph(f"Repo: {repo_full_name}"),
+            templates.divider(),
+            templates.heading2("Resumen de despliegue"),
+            templates.paragraph(deployment_summary),
+            templates.divider(),
+            templates.heading2("Servicios configurados"),
+            *[templates.bullet(service) for service in services],
+            templates.divider(),
+            templates.heading2("Pipeline CI/CD"),
+            *[templates.bullet(step) for step in pipeline_steps],
+            templates.divider(),
+            templates.heading2("Archivos generados"),
+            *[templates.bullet(r) for r in results],
+        ]
+        create_page(title=f"DEVOPS — {project_name}", content_blocks=blocks)
+    except Exception as notion_err:
+        logger.warning(f"⚠️ No se pudo documentar DevOps en Notion: {notion_err}")
 
-    create_page(
-        title=f"DEVOPS — {project_name}",
-        content_blocks=blocks
-    )
-
-    return f"Infraestructura configurada: {len(results)} archivos subidos. Documentado en Notion."
+    return f"Infraestructura configurada: {len(results)} archivos subidos."
 
 setup_devops_tool = FunctionTool(setup_devops_infrastructure)

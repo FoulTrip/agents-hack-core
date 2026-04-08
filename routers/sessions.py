@@ -168,10 +168,47 @@ async def delete_session(session_id: str, user: dict = Depends(get_current_user)
     await db_manager.client.artifact.delete_many(where={"sessionId": session.id})
     await db_manager.client.agentactivity.delete_many(where={"sessionId": session.id})
     await db_manager.client.hqrun.delete_many(where={"sessionId": session.id})
+    try:
+        await db_manager.client.sessiondecision.delete_many(where={"sessionId": session.id})  # type: ignore
+    except Exception:
+        pass
+    try:
+        await db_manager.client.pipelinelog.delete_many(where={"sessionId": session.id})  # type: ignore
+    except Exception:
+        pass
     await db_manager.client.projectsession.delete(where={"id": session.id})
     
     logger.info(f"🗑️ Sesión eliminada: {session_id} por usuario {user['id']}")
     return {"status": "success", "message": "Sesión eliminada"}
+
+
+@router.get("/sessions/{session_id}/logs")
+async def get_session_logs(session_id: str, limit: int = 500, user: dict = Depends(get_current_user)):
+    """Recupera todos los logs del pipeline para replay en el frontend"""
+    session = await db_manager.client.projectsession.find_unique(where={"sessionId": session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    if str(session.userId) != user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    logs = await session_manager.get_pipeline_logs(session_id, limit=limit)
+    return [
+        {
+            "id": str(log.id),
+            "type": log.type,
+            "message": log.message,
+            "detail": log.detail,
+            "level": log.level,
+            "phaseId": log.phaseId,
+            "phaseLabel": log.phaseLabel,
+            "agentName": log.agentName,
+            "agentRole": log.agentRole,
+            "metadata": log.metadata,
+            "createdAt": log.createdAt.isoformat() if log.createdAt else None
+        }
+        for log in logs
+    ]
+
 
 
 @router.websocket("/ws/{session_id}")
@@ -210,16 +247,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         def serialize_activity(act) -> dict:
             return {
                 "id": str(act.id),
-                "agentName": act.agentName,
-                "agentRole": act.agentRole,
-                "taskDescription": act.taskDescription,
-                "status": act.status,
-                "model": act.model,
-                "startTime": act.startTime.isoformat() if act.startTime else None,
-                "endTime": act.endTime.isoformat() if act.endTime else None,
-                "durationMs": act.durationMs,
-                "tokenCount": act.tokenCount,
-                "costEstimate": act.costEstimate
+                "agentName": getattr(act, "agentName", "Unknown"),
+                "agentRole": getattr(act, "agentRole", "Unknown"),
+                "taskDescription": getattr(act, "taskDescription", ""),
+                "status": getattr(act, "status", "unknown"),
+                "model": getattr(act, "model", None),
+                "startTime": act.startTime.isoformat() if hasattr(act, "startTime") and act.startTime else None,
+                "endTime": act.endTime.isoformat() if hasattr(act, "endTime") and act.endTime else None,
+                "durationMs": getattr(act, "durationMs", None),
+                "costEstimate": getattr(act, "costEstimate", 0)
             }
 
         def serialize_notion(page) -> dict:
@@ -237,28 +273,74 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 "fullName": repo.fullName
             }
 
+        def serialize_artifact(art) -> dict:
+            return {
+                "id": str(art.id),
+                "type": art.type,
+                "title": art.title,
+                "url": art.url,
+                "content": art.content,
+                "createdAt": art.createdAt.isoformat() if art.createdAt else None
+            }
+
         try:
-            # Extraemos el último repo y página para conveniencia del frontend (compatibilidad con broadcasts)
+            # Extraemos el último repo y página para conveniencia del frontend
             latest_repo = session.githubRepos[-1].url if hasattr(session, "githubRepos") and session.githubRepos else None
             latest_notion = {
                 "url": session.notionPages[-1].url,
                 "title": session.notionPages[-1].title
             } if hasattr(session, "notionPages") and session.notionPages else None
 
-            await websocket.send_json({
+            # Recuperar logs persistidos para replay
+            persisted_logs = await session_manager.get_pipeline_logs(session_id, limit=500)
+            serialized_logs = [
+                {
+                    "type": log.type,
+                    "message": log.message,
+                    "level": log.level,
+                    "phaseId": log.phaseId,
+                    "phaseLabel": log.phaseLabel,
+                    "agentName": log.agentName,
+                    "agentRole": log.agentRole,
+                    "createdAt": log.createdAt.isoformat() if log.createdAt else None
+                }
+                for log in persisted_logs
+            ]
+
+            # Consolidar documentos de Notion y Artefactos locales
+            all_docs = []
+            if hasattr(session, "notionPages") and session.notionPages:
+                all_docs.extend([serialize_notion(p) for p in session.notionPages])
+            if hasattr(session, "artifacts") and session.artifacts:
+                all_docs.extend([serialize_artifact(a) for a in session.artifacts])
+
+            state_payload = {
                 "type": "session_state",
                 "session_id": session_id,
                 "status": session.status,
                 "currentPhase": getattr(session, "currentPhase", None),
                 "completedPhases": getattr(session, "completedPhases", []),
                 "history": [serialize_message(m) for m in session.messages] if hasattr(session, "messages") and session.messages else [],
-                "activities": [serialize_activity(a) for a in session.agentActivities] if hasattr(session, "agentActivities") and session.agentActivities else [],
-                "notionPages": [serialize_notion(p) for p in session.notionPages] if hasattr(session, "notionPages") and session.notionPages else [],
+                "agentActivities": [serialize_activity(a) for a in session.agentActivities] if hasattr(session, "agentActivities") and session.agentActivities else [],
+                "docs": all_docs,
                 "githubRepos": [serialize_github(r) for r in session.githubRepos] if hasattr(session, "githubRepos") and session.githubRepos else [],
                 "repoUrl": latest_repo,
-                "notionDoc": latest_notion
-            })
-            logger.info(f"Initial state sent to websocket for session: {session_id}")
+                "notionDoc": latest_notion,
+                "pipelineLogs": serialized_logs
+            }
+            await websocket.send_json(state_payload)
+            logger.info(f"Initial state sent to websocket for session: {session_id} ({len(serialized_logs)} logs replayed, status: {session.status})")
+        except Exception as e:
+            logger.error(f"Error preparing or sending initial state: {e}", exc_info=True)
+            # Intentar enviar un estado básico si el complejo falló
+            try:
+                await websocket.send_json({
+                    "type": "session_state",
+                    "session_id": session_id,
+                    "status": session.status if 'session' in locals() else "unknown",
+                    "error": f"Error parcial al recuperar datos: {str(e)}"
+                })
+            except: pass
         except (WebSocketDisconnect, Exception) as e:
             logger.error(f"Error sending initial state: {e}")
             session_manager.remove_websocket(session_id, websocket)

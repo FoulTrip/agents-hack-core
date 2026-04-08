@@ -85,10 +85,46 @@ async def list_user_agents(user_token: dict = Depends(get_current_user)):
     return [to_model(a) for a in agents]
 
 
+@router.get("/session/{session_id}", response_model=List[AgentModel])
+async def list_agents_by_session(session_id: str, user_token: dict = Depends(get_current_user)):
+    # Verify session belongs to user
+    session = await db_manager.client.projectsession.find_unique(where={"sessionId": session_id})
+    if not session or str(session.userId) != user_token["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+        
+    agents = await db_manager.client.agent.find_many(
+        where={"userId": session.userId},
+        order={"order": "asc"}
+    )
+    
+    def to_model(a) -> AgentModel:
+        return AgentModel(
+            id=str(a.id),
+            name=a.name,
+            role=a.role,
+            icon=a.icon,
+            color=a.color,
+            description=a.description,
+            order=a.order,
+            active=a.active,
+            emoji=getattr(a, "emoji", "🤖") or "🤖",
+        )
+
+    return [to_model(a) for a in agents]
+
+
 @router.post("", response_model=AgentModel)
 async def create_agent(agent: AgentModel, user_token: dict = Depends(get_current_user)):
-    data = agent.model_dump(exclude={"id", "userId"})
+    data = agent.model_dump(exclude={"id", "userId", "currentTask"})
     data["user"] = {"connect": {"id": user_token["id"]}}
+    
+    if data.get("avatarProfile") is not None:
+        data["avatarProfile"] = json.dumps(data["avatarProfile"])
+        
+    role_def_id = data.pop("roleDefinitionId", None)
+    if role_def_id:
+        data["roleDefinition"] = {"connect": {"id": role_def_id}}
+        
     new_agent = await db_manager.client.agent.create(data=cast(Any, data))
     return AgentModel(**{**new_agent.__dict__, "id": str(new_agent.id)})
 
@@ -100,6 +136,14 @@ async def update_agent(agent_id: str, agent: AgentModel, user_token: dict = Depe
         raise HTTPException(status_code=403, detail="No autorizado")
         
     data = agent.model_dump(exclude={"id", "userId", "currentTask"})
+    
+    if data.get("avatarProfile") is not None:
+        data["avatarProfile"] = json.dumps(data["avatarProfile"])
+        
+    role_def_id = data.pop("roleDefinitionId", None)
+    if role_def_id:
+        data["roleDefinition"] = {"connect": {"id": role_def_id}}
+        
     await db_manager.client.agent.update(where={"id": agent_id}, data=cast(Any, data))
     return {"status": "success"}
 

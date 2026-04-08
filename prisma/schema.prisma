@@ -203,9 +203,42 @@ model ProjectSession {
   notionPages      NotionPage[]
   githubRepos      GithubRepo[]
   decisions        SessionDecision[]
+  pipelineLogs     PipelineLog[]
 
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+}
+
+// =============================================================
+// PIPELINE LOG — Persistent real-time log stream
+// =============================================================
+
+model PipelineLog {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId    String         @db.ObjectId
+  session      ProjectSession @relation(fields: [sessionId], references: [id])
+
+  // Event type: pipeline_start | pipeline_complete | pipeline_error
+  //             phase_start | phase_complete | awaiting_approval
+  //             agent_log | agent_tool_call | agent_tool_result
+  //             budget_check | hitl_approved | hitl_rejected
+  type         String
+
+  // Context
+  phaseId      Int?
+  phaseLabel   String?
+  agentName    String?
+  agentRole    String?
+
+  // Payload (the actual log content)
+  message      String?         // Human-readable log line
+  detail       String?         // Extended detail or raw LLM excerpt
+  metadata     Json?           // Extra structured data (token counts, tool args, etc.)
+
+  // Severity: info | warning | error | debug
+  level        String          @default("info")
+
+  createdAt    DateTime        @default(now())
 }
 
 // =============================================================
@@ -247,6 +280,7 @@ model Artifact {
   type       String         // "prd", "arch", "code", "qa", "docs", "devops"
   title      String
   url        String?
+  content    String?        // Fallback local storage for markdown content
   createdAt  DateTime       @default(now())
 }
 

@@ -46,7 +46,7 @@ class SessionManager:
         """Obtiene la sesión de MongoDB"""
         return await self.db.client.projectsession.find_unique(
             where={"sessionId": session_id},
-            include={"messages": True, "notionPages": True, "githubRepos": True, "agentActivities": True}
+            include={"messages": True, "notionPages": True, "githubRepos": True, "agentActivities": True, "artifacts": True}
         )
 
     async def list_user_sessions(self, user_id: str):
@@ -69,15 +69,38 @@ class SessionManager:
                 }
             )
 
-    async def link_notion_page(self, session_id: str, title: str, url: str, page_id: str):
+    async def link_notion_page(self, session_id: str, title: str, url: str, page_id: str, content: Optional[str] = None):
         session = await self.db.client.projectsession.find_unique(where={"sessionId": session_id})
         if session:
+            # Save as Notion link
             await self.db.client.notionpage.create(
                 data={
                     "sessionId": session.id,
                     "title": title,
                     "url": url,
                     "pageId": page_id
+                }
+            )
+            # Also save as a general Artifact for the UI to display easily
+            await self.add_artifact(
+                session_id=session_id,
+                type="notion_doc",
+                title=title,
+                url=url,
+                content=content
+            )
+
+    async def add_artifact(self, session_id: str, type: str, title: str, url: Optional[str] = None, content: Optional[str] = None):
+        """Guarda un artefacto (documento, repo, etc.) en MongoDB"""
+        session = await self.db.client.projectsession.find_unique(where={"sessionId": session_id})
+        if session:
+            await self.db.client.artifact.create(
+                data={
+                    "sessionId": session.id,
+                    "type": type,
+                    "title": title,
+                    "url": url,
+                    "content": content
                 }
             )
 
@@ -117,6 +140,75 @@ class SessionManager:
             where={"id": activity_id},
             data=kwargs  # type: ignore
         )
+
+    async def add_pipeline_log(
+        self,
+        session_id: str,
+        type: str,
+        message: str | None = None,
+        level: str = "info",
+        phase_id: int | None = None,
+        phase_label: str | None = None,
+        agent_name: str | None = None,
+        agent_role: str | None = None,
+        detail: str | None = None,
+        metadata: dict | None = None,
+    ) -> str:
+        """Persiste un log del pipeline en MongoDB para replay al reconectar"""
+        try:
+            session = await self.db.client.projectsession.find_unique(where={"sessionId": session_id})
+            if not session:
+                return ""
+            data: dict = {
+                "sessionId": session.id,
+                "type": type,
+                "level": level,
+            }
+            if message is not None:
+                data["message"] = str(message)[:2000]
+            if detail is not None:
+                data["detail"] = str(detail)[:4000]
+            if phase_id is not None:
+                data["phaseId"] = phase_id
+            if phase_label is not None:
+                data["phaseLabel"] = phase_label
+            if agent_name is not None:
+                data["agentName"] = agent_name
+            if agent_role is not None:
+                data["agentRole"] = agent_role
+            
+            # Metadata handling
+            if metadata is not None:
+                try:
+                    import json
+                    # Ensure it's a serializable dict
+                    ser = json.dumps(metadata)
+                    data["metadata"] = json.loads(ser)
+                except:
+                    data["metadata"] = {}
+            else:
+                data["metadata"] = {}
+
+            log_entry = await self.db.client.pipelinelog.create(data=data)
+            return str(log_entry.id)
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo guardar pipeline log ({type}): {e}")
+            return ""
+
+    async def get_pipeline_logs(self, session_id: str, limit: int = 500) -> list:
+        """Recupera todos los logs de una sesión para replay al reconectar"""
+        try:
+            session = await self.db.client.projectsession.find_unique(where={"sessionId": session_id})
+            if not session:
+                return []
+            return await self.db.client.pipelinelog.find_many(  # type: ignore
+                where={"sessionId": session.id},
+                order={"createdAt": "asc"},
+                take=limit
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo recuperar pipeline logs: {e}")
+            return []
 
     def add_websocket(self, session_id: str, websocket: WebSocket, user_id: str | None = None):
         if session_id not in self.websocket_connections:

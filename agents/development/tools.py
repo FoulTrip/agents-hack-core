@@ -26,36 +26,39 @@ def setup_project_repository(
     """
     logger.info(f"Configurando repositorio para: {project_name}")
 
-    repo_info = create_repository(
-        repo_name=repo_name,
-        description=description,
-        private=False,
-    )
+    try:
+        repo_info = create_repository(
+            repo_name=repo_name,
+            description=description,
+            private=False,
+        )
 
-    results = create_multiple_files(
-        repo_full_name=repo_info["full_name"],
-        files=files,
-        commit_message="feat: initial project structure by Software Factory",
-    )
+        results = create_multiple_files(
+            repo_full_name=repo_info["full_name"],
+            files=files,
+            commit_message="feat: initial project structure by Software Factory",
+        )
 
-    logger.info(f"Archivos subidos: {len(results)}")
+        logger.info(f"Archivos subidos: {len(results)}")
 
-    blocks = [
-        templates.heading1(f"Desarrollo — {project_name}"),
-        templates.divider(),
-        templates.heading2("Repositorio"),
-        templates.paragraph(f"URL: {repo_info['url']}"),
-        templates.divider(),
-        templates.heading2("Archivos generados"),
-        *[templates.bullet(r) for r in results],
-    ]
+        try:
+            blocks = [
+                templates.heading1(f"Desarrollo — {project_name}"),
+                templates.divider(),
+                templates.heading2("Repositorio"),
+                templates.paragraph(f"URL: {repo_info['url']}"),
+                templates.divider(),
+                templates.heading2("Archivos generados"),
+                *[templates.bullet(r) for r in results],
+            ]
+            create_page(title=f"DEV — {project_name}", content_blocks=blocks)
+        except Exception as notion_err:
+            logger.warning(f"⚠️ No se pudo documentar en Notion: {notion_err}")
 
-    create_page(
-        title=f"DEV — {project_name}",
-        content_blocks=blocks
-    )
-
-    return f"Repositorio creado: {repo_info['url']} — {len(results)} archivos subidos y documentados en Notion."
+        return f"Repositorio creado: {repo_info['url']} — {len(results)} archivos subidos."
+    except Exception as e:
+        logger.error(f"❌ Error al configurar repositorio: {e}")
+        return f"⚠️ Error al configurar el repositorio de GitHub: {str(e)}"
 
 setup_repository_tool = FunctionTool(setup_project_repository)
 create_file_tool = FunctionTool(create_file)
