@@ -1,6 +1,6 @@
-# TripKode Software Factory - Enterprise Edition (v3.0.0)
+# TripKode Agents - Enterprise Edition
 
-La **TripKode Software Factory** es un ecosistema agéntico de diseño y desarrollo de software automatizado para TripKode. Esta versión **Enterprise** introduce capas de gobernanza financiera, seguridad de datos y colaboración multi-usuario de grado industrial.
+**TripKode Agents** no es solo un ecosistema agéntico de desarrollo; es una plataforma de **Simulación de Organizaciones Autónomas**. Permite desplegar fuerzas de trabajo digitales completas, automatizar jerarquías empresariales y visualizar flujos de trabajo en un entorno virtual 3D en tiempo real.
 
 ---
 
