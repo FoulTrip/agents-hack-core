@@ -193,7 +193,7 @@ class SessionManager:
             return str(log_entry.id)
         except Exception as e:
             logger.warning(
-                f"⚠️ No se pudo guardar pipeline log ({type}) session={session_id} keys={list(data.keys())}: {e}",
+                f"No se pudo guardar pipeline log ({type}) session={session_id} keys={list(data.keys())}: {e}",
                 exc_info=True
             )
             return ""
@@ -210,7 +210,7 @@ class SessionManager:
                 take=limit
             )
         except Exception as e:
-            logger.warning(f"⚠️ No se pudo recuperar pipeline logs: {e}")
+            logger.warning(f"No se pudo recuperar pipeline logs: {e}")
             return []
 
     def add_websocket(self, session_id: str, websocket: WebSocket, user_id: str | None = None):

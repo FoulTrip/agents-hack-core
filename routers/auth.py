@@ -1,4 +1,4 @@
-﻿import json
+import json
 from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -55,14 +55,14 @@ async def google_login(data: dict):
     try:
         db_user = await db_manager.client.user.find_unique(where={"email": email})
         if not db_user:
-            logger.info(f"🆕 Creando nuevo usuario desde Google: {email}")
+            logger.info(f"Creando nuevo usuario desde Google: {email}")
             if google_picture:
                 update_data["googleAvatar"] = google_picture
                 update_data["avatarType"] = "google"
             create_data = cast(Any, {"email": email, **update_data})
             db_user = await db_manager.client.user.create(data=create_data)
         else:
-            logger.info(f"🔄 Actualizando tokens de conexión GCP para: {email}")
+            logger.info(f"Actualizando tokens de conexión GCP para: {email}")
             if google_picture:
                 update_data["googleAvatar"] = google_picture
                 if not getattr(db_user, "avatarType", None):
@@ -72,7 +72,7 @@ async def google_login(data: dict):
                 data=cast(Any, update_data)
             )
     except Exception as e:
-        logger.error(f"❌ Error crítico en DB al sincronizar Google: {e}")
+        logger.error(f"Error crítico en DB al sincronizar Google: {e}")
         logger.warning("Probando sincronización básica sin campos GCP...")
         basic_data = {k: v for k, v in {"name": data.get("name"), "googleId": data.get("sub")}.items() if v is not None}
         db_user = await db_manager.client.user.upsert(
@@ -99,7 +99,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 @router.post("/api/auth/logout")
 async def logout(user: dict = Depends(get_current_user)):
-    logger.info(f"🚪 El usuario ha cerrado sesión: {user['sub']}")
+    logger.info(f"El usuario ha cerrado sesión: {user['sub']}")
     return {"status": "success", "message": "Sesión cerrada en el backend"}
 
 @router.get("/api/user/config", response_model=UserConfig)
@@ -237,6 +237,6 @@ async def ensure_user_agents(user_id: str):
                 "documentationLinks": []
             })
         )
-        logger.info(f"🧠 UserGlobalContext por defecto creado para: {user_id}")
+        logger.info(f"UserGlobalContext por defecto creado para: {user_id}")
 
-    logger.info(f"💾 Fábrica completa provisionada para usuario: {user_id}")
+    logger.info(f"Fábrica completa provisionada para usuario: {user_id}")

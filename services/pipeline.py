@@ -283,16 +283,16 @@ async def extract_and_link_artifacts(session_id: str, text: str, user_config: di
             full_name=repo_full_name
         )
     if repo_url:
-        logger.info(f"🚀 Repositorio detectado y vinculado: {repo_url}")
+        logger.info(f"Repositorio detectado y vinculado: {repo_url}")
     if last_notion_url:
-        logger.info(f"📄 Documento Notion detectado: {last_notion_url}")
+        logger.info(f"Documento Notion detectado: {last_notion_url}")
         
     return {"repoUrl": repo_url, "notionDoc": {"url": last_notion_url, "title": "Página de la Fase"} if last_notion_url else None}
 
 
 async def cleanup_external_resources(session, user_id: str):
     """Elimina repositorios de GitHub y archiva páginas de Notion asociados a una sesión."""
-    logger.info(f"🧹 Iniciando limpieza externa para sesión {session.sessionId}")
+    logger.info(f"Iniciando limpieza externa para sesión {session.sessionId}")
     
     user = await db_manager.client.user.find_unique(where={"id": user_id})
     if not user:
@@ -307,24 +307,24 @@ async def cleanup_external_resources(session, user_id: str):
         if github_token:
             for repo in getattr(session, "githubRepos", []):
                 try:
-                    logger.info(f"🗑️ Eliminando repo GitHub: {repo.fullName}")
+                    logger.info(f"Eliminando repo GitHub: {repo.fullName}")
                     headers = {
                         "Authorization": f"token {github_token}",
                         "Accept": "application/vnd.github.v3+json"
                     }
                     async with http_session.delete(f"https://api.github.com/repos/{repo.fullName}", headers=headers) as resp:
                         if resp.status == 204:
-                            logger.info(f"✅ Repo {repo.fullName} eliminado")
+                            logger.info(f"Repo {repo.fullName} eliminado")
                         else:
                             text = await resp.text()
-                            logger.warning(f"⚠️ Falló borrado de GitHub ({resp.status}): {text}")
+                            logger.warning(f"Falló borrado de GitHub ({resp.status}): {text}")
                 except Exception as e:
-                    logger.error(f"❌ Error borrando GitHub: {e}")
+                    logger.error(f"Error borrando GitHub: {e}")
 
         if notion_token:
             for page in getattr(session, "notionPages", []):
                 try:
-                    logger.info(f"🗑️ Archivando página Notion: {page.pageId}")
+                    logger.info(f"Archivando página Notion: {page.pageId}")
                     headers = {
                         "Authorization": f"Bearer {notion_token}",
                         "Content-Type": "application/json",
@@ -333,12 +333,12 @@ async def cleanup_external_resources(session, user_id: str):
                     data = {"archived": True}
                     async with http_session.patch(f"https://api.notion.com/v1/pages/{page.pageId}", headers=headers, json=data) as resp:
                         if resp.status == 200:
-                            logger.info(f"✅ Página Notion {page.pageId} archivada")
+                            logger.info(f"Página Notion {page.pageId} archivada")
                         else:
                             text = await resp.text()
-                            logger.warning(f"⚠️ Falló archivado de Notion ({resp.status}): {text}")
+                            logger.warning(f"Falló archivado de Notion ({resp.status}): {text}")
                 except Exception as e:
-                    logger.error(f"❌ Error archivando Notion: {e}")
+                    logger.error(f"Error archivando Notion: {e}")
 
 
 async def run_pipeline_with_callbacks(
@@ -380,7 +380,7 @@ async def run_pipeline_with_callbacks(
     })
     await session_manager.add_pipeline_log(
         session_id=session_id, type="pipeline_start",
-        message=f"🚀 Pipeline iniciado{' (retomado)' if completed_phases else ''}. Prompt: {prompt[:100]}",
+        message=f"Pipeline iniciado{' (retomado)' if completed_phases else ''}. Prompt: {prompt[:100]}",
         metadata={"resumed": len(completed_phases) > 0, "prompt_length": len(prompt)}
     )
     
@@ -479,7 +479,7 @@ async def run_pipeline_with_callbacks(
             # Desde fase 4 en adelante no permitimos continuar sin repo oficial.
             if phase_id >= 4 and "github" in connectors and not locked_repo_full_name:
                 error_msg = (
-                    "❌ No se detectó repositorio oficial tras la fase de desarrollo. "
+                    "No se detectó repositorio oficial tras la fase de desarrollo. "
                     "Se aborta para evitar subir artefactos a repositorios incorrectos."
                 )
                 logger.error(f"[run={run_id}] {error_msg} phase={phase_id} label={label}")
@@ -511,16 +511,16 @@ async def run_pipeline_with_callbacks(
 
             set_user_context(user_id_internal, session_id, current_phase_config)
 
-            # 1. Verificar Presupuesto antes de cada fase (🛑 Bloqueo Activo)
+            # 1. Verificar Presupuesto antes de cada fase (Bloqueo Activo)
             await session_manager.add_pipeline_log(
                 session_id=session_id, type="budget_check",
-                message=f"💰 Verificando presupuesto antes de fase {phase_id} ({label})",
+                message=f"Verificando presupuesto antes de fase {phase_id} ({label})",
                 phase_id=phase_id, phase_label=label, level="debug"
             )
             authorized = await BudgetGuardian.check_budget_authorization(user_id_internal)
             logger.debug(f"[run={run_id}] Budget check phase={phase_id} authorized={authorized}")
             if not authorized:
-                error_msg = "🚨 EJECUCIÓN SUSPENDIDA: Se ha alcanzado el límite de presupuesto diario."
+                error_msg = "EJECUCIÓN SUSPENDIDA: Se ha alcanzado el límite de presupuesto diario."
                 await session_manager.update_session(session_id, status="failed", errorMessage=error_msg)
                 await session_manager.broadcast_to_session(session_id, {
                     "type": "pipeline_error",
@@ -540,7 +540,7 @@ async def run_pipeline_with_callbacks(
             if agent_role == "architecture_agent":
                 logger.info(f"[run={run_id}] Waiting for HITL approval at phase={phase_id} ({label})")
                 await session_manager.update_session(session_id, status="awaiting_approval")
-                approval_msg = "🏗️ Arquitectura generada. Por favor, revisa y aprueba para continuar con el desarrollo."
+                approval_msg = "Arquitectura generada. Por favor, revisa y aprueba para continuar con el desarrollo."
                 await session_manager.broadcast_to_session(session_id, {
                     "type": "awaiting_approval",
                     "phase": label,
@@ -568,7 +568,7 @@ async def run_pipeline_with_callbacks(
                         await session_manager.update_session(session_id, status="working")
                         await session_manager.add_pipeline_log(
                             session_id=session_id, type="hitl_approved",
-                            message="✅ Arquitectura aprobada por el usuario. Continuando con el desarrollo.",
+                            message="Arquitectura aprobada por el usuario. Continuando con el desarrollo.",
                             phase_id=phase_id, phase_label=label, level="info"
                         )
                         break
@@ -587,7 +587,7 @@ async def run_pipeline_with_callbacks(
             )
             await session_manager.add_pipeline_log(
                 session_id=session_id, type="agent_log",
-                message=f"🧠 {label}: iniciando ejecución con modelo {preferred_model}",
+                message=f"[Agent] {label}: iniciando ejecución con modelo {preferred_model}",
                 phase_id=phase_id, phase_label=label,
                 agent_name=label, agent_role=agent_role, level="debug"
             )
@@ -668,7 +668,7 @@ async def run_pipeline_with_callbacks(
             response_preview = (response_text or "").strip().replace("\n", " ")[:300]
             await session_manager.add_pipeline_log(
                 session_id=session_id, type="agent_log",
-                message=f"🧾 {label}: respuesta recibida ({len(response_text or '')} chars)",
+                message=f"{label}: respuesta recibida ({len(response_text or '')} chars)",
                 detail=response_preview,
                 phase_id=phase_id, phase_label=label,
                 agent_name=label, agent_role=agent_role, level="debug"
@@ -766,7 +766,7 @@ async def run_pipeline_with_callbacks(
             )
             total_local_artifacts = synced_session_docs + synced_repo_docs
             if total_local_artifacts > 0:
-                human_msg = f"📁 Artefactos locales detectados: {total_local_artifacts} nuevos elementos."
+                human_msg = f"Artefactos locales detectados: {total_local_artifacts} nuevos elementos."
                 await session_manager.add_pipeline_log(
                     session_id=session_id,
                     type="agent_log",
@@ -804,7 +804,7 @@ async def run_pipeline_with_callbacks(
             # (tests/docs) a repositorios incorrectos o vacíos.
             if agent_role == "development_agent" and (not effective_repo_url or not locked_repo_full_name):
                 dev_error = (
-                    "❌ Fase de Desarrollo incompleta: no se detectó repositorio/código base ejecutable. "
+                    "Fase de Desarrollo incompleta: no se detectó repositorio/código base ejecutable. "
                     "Se detiene el pipeline para evitar generar un repo inválido (solo tests/docs)."
                 )
                 logger.error(
@@ -858,7 +858,7 @@ async def run_pipeline_with_callbacks(
                 "type": "phase_complete",
                 "phase_id": phase_id,
                 "phase_label": label,
-                "logs": [f"✅ Fase {phase_id} completada", f"📝 {human_summary}"],
+                "logs": [f"Fase {phase_id} completada", f"{human_summary}"],
                 "message": human_summary,
                 "fullResponse": response_text,
                 "repoUrl": effective_repo_url,
@@ -879,7 +879,7 @@ async def run_pipeline_with_callbacks(
                 })
             await session_manager.add_pipeline_log(
                 session_id=session_id, type="phase_complete",
-                message=f"✅ Fase {phase_id} ({label}) completada",
+                message=f"Fase {phase_id} ({label}) completada",
                 detail=human_summary,
                 phase_id=phase_id, phase_label=label, agent_role=agent_role,
                 metadata={
@@ -914,7 +914,7 @@ async def run_pipeline_with_callbacks(
         await session_manager.broadcast_to_session(session_id, {"type": "pipeline_complete", "session_id": session_id, "result": final_result})
         await session_manager.add_pipeline_log(
             session_id=session_id, type="pipeline_complete",
-            message=f"🏁 Pipeline completado. {len(phases)} fases ejecutadas.",
+            message=f"Pipeline completado. {len(phases)} fases ejecutadas.",
             metadata={"phases_completed": len(phases)}, level="info"
         )
         logger.info(f"[run={run_id}] Pipeline completed successfully phases={len(phases)} session={session_id}")
@@ -924,13 +924,13 @@ async def run_pipeline_with_callbacks(
         error_msg = str(e)
         tb = traceback.format_exc()
         logger.exception(
-            f"[run={run_id}] ❌ Error en pipeline session={session_id} phase={current_phase_id} label={current_phase_label} role={current_phase_role}: {error_msg}"
+            f"[run={run_id}] Error en pipeline session={session_id} phase={current_phase_id} label={current_phase_label} role={current_phase_role}: {error_msg}"
         )
         await session_manager.update_session(session_id, status="failed", errorMessage=error_msg)
         await session_manager.broadcast_to_session(session_id, {"type": "pipeline_error", "session_id": session_id, "error": error_msg})
         await session_manager.add_pipeline_log(
             session_id=session_id, type="pipeline_error",
-            message=f"❌ Error fatal en pipeline: {error_msg}",
+            message=f"Error fatal en pipeline: {error_msg}",
             detail=tb,
             phase_id=current_phase_id,
             phase_label=current_phase_label,

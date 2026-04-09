@@ -6,7 +6,7 @@ from core.logger import get_logger
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/recon", tags=["reconciliation"])
 
-# ⚠️ En producción, configurar CLOUD_SCHEDULER_SECRET en .env
+# En producción, configurar CLOUD_SCHEDULER_SECRET en .env
 RECON_SECRET = os.getenv("CLOUD_SCHEDULER_SECRET", "developer_test_secret")
 
 def verify_scheduler_auth(authorization: str = Header(None)):
@@ -15,7 +15,7 @@ def verify_scheduler_auth(authorization: str = Header(None)):
     Opcionalmente se puede usar OIDC si está desplegado en Cloud Run, pero aquí usamos un Bearer simple.
     """
     if not authorization or authorization != f"Bearer {RECON_SECRET}":
-        logger.warning("🚫 Intento de reconciliación no autorizado.")
+        logger.warning("Intento de reconciliación no autorizado.")
         raise HTTPException(status_code=403, detail="No autorizado")
     return True
 
@@ -27,8 +27,8 @@ async def trigger_billing_reconciliation(authorized: bool = Depends(verify_sched
     """
     try:
         summary = await bill_recon.reconcile_all_users()
-        logger.info(f"📊 Reconciliación exitosa: {summary}")
+        logger.info(f"Reconciliación exitosa: {summary}")
         return {"status": "success", "summary": summary}
     except Exception as e:
-        logger.error(f"🚨 Falla crítica en reconciliación: {e}")
+        logger.error(f"Falla crítica en reconciliación: {e}")
         raise HTTPException(status_code=500, detail=str(e))

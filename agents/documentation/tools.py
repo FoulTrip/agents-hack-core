@@ -51,7 +51,7 @@ def save_documentation(
             effective_repo_url = f"https://github.com/{repo_full_name}" if repo_full_name else None
         logger.info(f"Archivos de documentación subidos: {len(results)}")
     except Exception as gh_err:
-        logger.error(f"❌ Error al subir documentación a GitHub: {gh_err}")
+        logger.error(f"Error al subir documentación a GitHub: {gh_err}")
         return {
             "success": False,
             "repo_full_name": repo_full_name,
@@ -63,7 +63,7 @@ def save_documentation(
             "local_files_written": local_sync.get("written_count", 0),
             "local_errors": local_sync.get("errors", []),
             "error": str(gh_err),
-            "message": f"⚠️ Error al subir documentación a GitHub: {str(gh_err)}",
+            "message": f"Error al subir documentación a GitHub: {str(gh_err)}",
         }
 
     try:
@@ -84,7 +84,7 @@ def save_documentation(
         ]
         notion_result = create_page(title=f"DOCS — {project_name}", content_blocks=blocks)
     except Exception as notion_err:
-        logger.warning(f"⚠️ No se pudo documentar en Notion: {notion_err}")
+        logger.warning(f"No se pudo documentar en Notion: {notion_err}")
         notion_result = None
 
     return {

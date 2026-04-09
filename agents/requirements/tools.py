@@ -57,7 +57,7 @@ def save_requirements_to_notion(
         return page
     
     except Exception as e:
-        logger.error(f"❌ Error inesperado al guardar requerimientos en Notion: {e}")
+        logger.error(f"Error inesperado al guardar requerimientos en Notion: {e}")
         from tools.notion.templates import blocks_to_markdown
         return {
             "success": False,

@@ -37,7 +37,7 @@ def setup_devops_infrastructure(
         )
 
     if "your_username" in repo_full_name or "your_repo_name" in repo_full_name:
-        logger.warning(f"⚠️ El Agente DevOps intentó usar un placeholder: {repo_full_name}")
+        logger.warning(f"El Agente DevOps intentó usar un placeholder: {repo_full_name}")
         return {
             "success": False,
             "repo_full_name": repo_full_name,
@@ -49,7 +49,7 @@ def setup_devops_infrastructure(
             "local_files_written": local_sync.get("written_count", 0),
             "local_errors": local_sync.get("errors", []),
             "error": "placeholder_repo_name",
-            "message": "⚠️ Error: Se está intentando usar un nombre de repositorio de ejemplo (your_username/your_repo_name). Por favor, usa el nombre real del repositorio creado en la fase anterior.",
+            "message": "Error: Se está intentando usar un nombre de repositorio de ejemplo (your_username/your_repo_name). Por favor, usa el nombre real del repositorio creado en la fase anterior.",
         }
 
     try:
@@ -69,7 +69,7 @@ def setup_devops_infrastructure(
             effective_repo_url = f"https://github.com/{repo_full_name}" if repo_full_name else None
         logger.info(f"Archivos de infraestructura subidos: {len(results)}")
     except Exception as gh_err:
-        logger.error(f"❌ Error al subir infraestructura a GitHub: {gh_err}")
+        logger.error(f"Error al subir infraestructura a GitHub: {gh_err}")
         return {
             "success": False,
             "repo_full_name": repo_full_name,
@@ -81,7 +81,7 @@ def setup_devops_infrastructure(
             "local_files_written": local_sync.get("written_count", 0),
             "local_errors": local_sync.get("errors", []),
             "error": str(gh_err),
-            "message": f"⚠️ Error al subir archivos DevOps a GitHub: {str(gh_err)}",
+            "message": f"Error al subir archivos DevOps a GitHub: {str(gh_err)}",
         }
 
     try:
@@ -105,7 +105,7 @@ def setup_devops_infrastructure(
         ]
         notion_result = create_page(title=f"DEVOPS — {project_name}", content_blocks=blocks)
     except Exception as notion_err:
-        logger.warning(f"⚠️ No se pudo documentar DevOps en Notion: {notion_err}")
+        logger.warning(f"No se pudo documentar DevOps en Notion: {notion_err}")
         notion_result = None
 
     return {

@@ -1,32 +1,32 @@
-# 🏢 TripKode Software Factory - Enterprise Edition (v3.0.0)
+# TripKode Software Factory - Enterprise Edition (v3.0.0)
 
 La **TripKode Software Factory** es un ecosistema agéntico de diseño y desarrollo de software automatizado para TripKode. Esta versión **Enterprise** introduce capas de gobernanza financiera, seguridad de datos y colaboración multi-usuario de grado industrial.
 
 ---
 
-## 💎 Características Principales (Enterprise Grade)
+## Características Principales (Enterprise Grade)
 
-### 1. 💵 Gobernanza Financiera (GCP Billing Integration)
+### 1. Gobernanza Financiera (GCP Billing Integration)
 *   **Official Metrics SDK**: Integración directa con `google-cloud-monitoring` para obtener consumo real de tokens desde la infraestructura de Vertex AI.
 *   **Cost Attribution via Labels**: Cada petición de agente inyecta etiquetas (`user_id`, `session_id`) en GCP para una auditoría financiera exacta por cliente y proyecto.
-*   **🛑 Budget Guardian (Active Enforcement)**: Bloqueo proactivo del pipeline. Si el gasto diario acumulado del usuario supera su límite configurado en MongoDB, el sistema detiene todas las ejecuciones de IA.
-*   **🔄 Reconciliación Nocturna**: Endpoint `/api/recon/billing` diseñado para **Google Cloud Scheduler**. Sincroniza cada noche los balances locales con la facturación real de Google para una precisión contable del 100%.
+*   **Budget Guardian (Active Enforcement)**: Bloqueo proactivo del pipeline. Si el gasto diario acumulado del usuario supera su límite configurado en MongoDB, el sistema detiene todas las ejecuciones de IA.
+*   **Reconciliación Nocturna**: Endpoint `/api/recon/billing` diseñado para **Google Cloud Scheduler**. Sincroniza cada noche los balances locales con la facturación real de Google para una precisión contable del 100%.
 
-### 2. 👋 Human-in-the-Loop (HITL)
+### 2. Human-in-the-Loop (HITL)
 *   **Checkpoint de Arquitectura**: El orquestador pausa automáticamente la ejecución tras la fase de diseño técnico.
 *   **Aprobación Manual**: Requiere intervención explícita del Administrador (vía API o Dashboard) para proceder con el desarrollo, evitando alucinaciones o arquitecturas costosas no deseadas.
 
-### 3. 🔐 Seguridad y Privacidad (Zero-Trust)
-*   **🛡️ PII Sanitizer Middleware**: Detección y enmascaramiento automático de información sensible (IPs, Tokens, Emails, Secret Keys) antes de enviar prompts a los modelos públicos de Vertex AI.
+### 3. Seguridad y Privacidad (Zero-Trust)
+*   **PII Sanitizer Middleware**: Detección y enmascaramiento automático de información sensible (IPs, Tokens, Emails, Secret Keys) antes de enviar prompts a los modelos públicos de Vertex AI.
 *   **Secured Logs**: Los logs de actividad en la base de datos local también se guardan sanitizados para mantener un entorno de "Zero Privacy Leak".
 
-### 4. 👥 Colaboración y HUD 3D
+### 4. Colaboración y HUD 3D
 *   **Presencia Multi-usuario**: Visualización en tiempo real de qué administradores están conectados en la oficina virtual.
 *   **Claw3D SDK**: Sincronización de agentes y humanos en el entorno 3D mediante WebSockets persistentes gestionados por `SessionManager`.
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 | Capa | Tecnología |
 | :--- | :--- |
@@ -39,7 +39,7 @@ La **TripKode Software Factory** es un ecosistema agéntico de diseño y desarro
 
 ---
 
-## 🚀 Guía de Inicio Rápido
+## Guía de Inicio Rápido
 
 1.  **Configurar Variables de Env**:
     ```bash
@@ -57,7 +57,7 @@ La **TripKode Software Factory** es un ecosistema agéntico de diseño y desarro
 
 ---
 
-## 🚦 Endpoints Críticos (v3)
+## Endpoints Críticos (v3)
 
 *   `POST /api/generate`: Inicia el pipeline agéntico con auditoría de costos.
 *   `POST /api/approve/{id}`: Libera una fase detenida por el sistema HITL.
@@ -66,4 +66,4 @@ La **TripKode Software Factory** es un ecosistema agéntico de diseño y desarro
 *   `WS   /ws/{id}?userId=...`: Canal de comunicación para presencia y pipeline logs.
 
 ---
-*Desarrollado con ❤️ por el equipo de TripKode Agentic Systems.*
+*Desarrollado por el equipo de TripKode Agentic Systems.*

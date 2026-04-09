@@ -61,7 +61,7 @@ def save_architecture_to_notion(
 
         return page
     except Exception as e:
-        logger.error(f"❌ Error al guardar arquitectura en Notion: {e}")
+        logger.error(f"Error al guardar arquitectura en Notion: {e}")
         from tools.notion.templates import blocks_to_markdown
         return {
             "success": False,

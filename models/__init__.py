@@ -98,7 +98,7 @@ class AgentModel(BaseModel):
     
     # Claw3D Identity
     vibe: Optional[str] = "Sharp and helpful"
-    emoji: Optional[str] = "🤖"
+    emoji: Optional[str] = ""
     
     # Claw3D Soul & Persona
     personality: Optional[str] = None
@@ -188,7 +188,7 @@ DEFAULT_AGENTS = [
     {
         "name": "Advisor Agent", "role": "requirements_agent", "icon": "ShieldCheck", "color": "#10B981", "order": 1, 
         "description": "Analista de requerimientos", "model": "gemini-3-flash-preview", "connectors": ["notion"],
-        "emoji": "🧠", "vibe": "Profesional agudo", "status": "sitting",
+        "emoji": "", "vibe": "Profesional agudo", "status": "sitting",
         "avatarStyle": "3d", "officeDesk": "DESK-A1", "officeWing": "Executive", "officeFloor": 1, 
         "socialTone": "Professional", "standupBehavior": "Leader", "computerType": "macbook",
         "avatarProfile": {"skinColor": "#E0AC69", "hairStyle": "bob", "hairColor": "#2C1B18", "shirtColor": "#10B981", "pantsColor": "#1F2937", "shoeColor": "#111827"}
@@ -196,7 +196,7 @@ DEFAULT_AGENTS = [
     {
         "name": "Architect Agent", "role": "architecture_agent", "icon": "Layers", "color": "#3B82F6", "order": 2, 
         "description": "Diseño de infraestructura", "model": "gemini-3-flash-preview", "connectors": ["notion"],
-        "emoji": "📐", "vibe": "Arquitecto visionario", "status": "working",
+        "emoji": "", "vibe": "Arquitecto visionario", "status": "working",
         "avatarStyle": "3d", "officeDesk": "DESK-T1", "officeWing": "Tech", "officeFloor": 1, 
         "socialTone": "Formal", "standupBehavior": "Participant", "computerType": "workstation",
         "avatarProfile": {"skinColor": "#FFDBAC", "hairStyle": "buzz", "hairColor": "#4B2C20", "shirtColor": "#3B82F6", "pantsColor": "#374151", "shoeColor": "#111827"}
@@ -204,7 +204,7 @@ DEFAULT_AGENTS = [
     {
         "name": "Developer Agent", "role": "development_agent", "icon": "Code2", "color": "#F59E0B", "order": 3, 
         "description": "Escritura de código", "model": "gemini-3-flash-preview", "connectors": ["github", "notion"],
-        "emoji": "💻", "vibe": "Codificador implacable", "status": "working",
+        "emoji": "", "vibe": "Codificador implacable", "status": "working",
         "avatarStyle": "pixel", "officeDesk": "DESK-D1", "officeWing": "Tech", "officeFloor": 1, 
         "socialTone": "Casual", "standupBehavior": "Participant", "computerType": "high-end-pc",
         "avatarProfile": {"skinColor": "#F1C27D", "hairStyle": "messy", "hairColor": "#000000", "shirtColor": "#F59E0B", "pantsColor": "#1F2937", "shoeColor": "#000000"}
@@ -212,7 +212,7 @@ DEFAULT_AGENTS = [
     {
         "name": "QA Agent", "role": "qa_agent", "icon": "TestTube2", "color": "#8B5CF6", "order": 4, 
         "description": "Validación y pruebas", "model": "gemini-3-flash-preview", "connectors": ["github"],
-        "emoji": "🧪", "vibe": "Ojo de lince", "status": "sitting",
+        "emoji": "", "vibe": "Ojo de lince", "status": "sitting",
         "avatarStyle": "pixel", "officeDesk": "DESK-Q1", "officeWing": "Tech", "officeFloor": 1, 
         "socialTone": "Professional", "standupBehavior": "Participant", "computerType": "pc",
         "avatarProfile": {"skinColor": "#FFDBAC", "hairStyle": "long", "hairColor": "#7B3F00", "shirtColor": "#8B5CF6", "pantsColor": "#4B5563", "shoeColor": "#1F2937"}
@@ -220,7 +220,7 @@ DEFAULT_AGENTS = [
     {
         "name": "Docs Agent", "role": "documentation_agent", "icon": "BookOpen", "color": "#06B6D4", "order": 5, 
         "description": "Documentación técnica", "model": "gemini-3-flash-preview", "connectors": ["github"],
-        "emoji": "📚", "vibe": "Narrador técnico", "status": "idle",
+        "emoji": "", "vibe": "Narrador técnico", "status": "idle",
         "avatarStyle": "emoji", "officeDesk": "DESK-S1", "officeWing": "Content", "officeFloor": 1, 
         "socialTone": "Casual", "standupBehavior": "Participant", "computerType": "laptop",
         "avatarProfile": {"skinColor": "#E0AC69", "hairStyle": "medium", "hairColor": "#3D2314", "shirtColor": "#06B6D4", "pantsColor": "#374151", "shoeColor": "#111827"}
@@ -228,7 +228,7 @@ DEFAULT_AGENTS = [
     {
         "name": "DevOps Agent", "role": "devops_agent", "icon": "Server", "color": "#EC4899", "order": 6, 
         "description": "Infraestructura", "model": "gemini-3-flash-preview", "connectors": ["github", "google-cloud"],
-        "emoji": "🚀", "vibe": "Maestro de nubes", "status": "working",
+        "emoji": "", "vibe": "Maestro de nubes", "status": "working",
         "avatarStyle": "3d", "officeDesk": "DESK-I1", "officeWing": "Core", "officeFloor": 1, 
         "socialTone": "Formal", "standupBehavior": "Participant", "computerType": "workstation",
         "avatarProfile": {"skinColor": "#FFDBAC", "hairStyle": "crew", "hairColor": "#000000", "shirtColor": "#EC4899", "pantsColor": "#1F2937", "shoeColor": "#111827"}

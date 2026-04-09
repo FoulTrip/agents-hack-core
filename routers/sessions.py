@@ -169,7 +169,7 @@ async def approve_phase(session_id: str, user: dict = Depends(get_current_user))
     
     await session_manager.broadcast_to_session(session_id, {
         "type": "approved",
-        "message": "✅ Aprobación humana recibida. Continuando ejecución..."
+        "message": "Aprobación humana recibida. Continuando ejecución..."
     })
     
     return {"status": "success", "message": "Fase aprobada"}
@@ -194,7 +194,7 @@ async def reject_phase(session_id: str, feedback: dict, user: dict = Depends(get
     
     await session_manager.broadcast_to_session(session_id, {
         "type": "rejected",
-        "message": f"❌ Cambios solicitados: {comment}"
+        "message": f"Cambios solicitados: {comment}"
     })
     
     return {"status": "success", "message": "Feedback enviado"}
@@ -233,7 +233,7 @@ async def delete_session(session_id: str, user: dict = Depends(get_current_user)
         pass
     await db_manager.client.projectsession.delete(where={"id": session.id})
     
-    logger.info(f"🗑️ Sesión eliminada: {session_id} por usuario {user['id']}")
+    logger.info(f"Sesión eliminada: {session_id} por usuario {user['id']}")
     return {"status": "success", "message": "Sesión eliminada"}
 
 

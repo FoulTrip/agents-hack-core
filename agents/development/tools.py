@@ -75,7 +75,7 @@ def setup_project_repository(
             ]
             notion_result = create_page(title=f"DEV — {project_name}", content_blocks=blocks)
         except Exception as notion_err:
-            logger.warning(f"⚠️ No se pudo documentar en Notion: {notion_err}")
+            logger.warning(f"No se pudo documentar en Notion: {notion_err}")
             notion_result = None
 
         return {
@@ -92,7 +92,7 @@ def setup_project_repository(
             "message": f"Repositorio creado: {effective_repo_url} — {len(results)} archivos subidos.",
         }
     except Exception as e:
-        logger.error(f"❌ Error al configurar repositorio: {e}")
+        logger.error(f"Error al configurar repositorio: {e}")
         # Fallback: mantener generación local incluso si falla GitHub.
         if not local_sync.get("local_project_path"):
             local_sync = sync_project_files_local(repo_full_name=repo_name, files=files)
@@ -108,7 +108,7 @@ def setup_project_repository(
             "local_files_written": local_sync.get("written_count", 0),
             "local_errors": local_sync.get("errors", []),
             "error": str(e),
-            "message": f"⚠️ Error al configurar el repositorio de GitHub: {str(e)}",
+            "message": f"Error al configurar el repositorio de GitHub: {str(e)}",
         }
 
 setup_repository_tool = FunctionTool(setup_project_repository)

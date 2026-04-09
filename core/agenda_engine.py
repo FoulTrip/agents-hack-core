@@ -15,7 +15,7 @@ async def trigger_standup_event(meeting):
     Teletransporta a los agentes a la Sala de Conferencias y dispara un registro.
     Esta función simula la integración con el motor Claw3D (Colyseus).
     """
-    logger.info(f"🚀 [WORKFLOW] Iniciando '{meeting.title}' (ID: {meeting.id})")
+    logger.info(f"[WORKFLOW] Iniciando '{meeting.title}' (ID: {meeting.id})")
     
     try:
         # 1. Recuperar los agentes activos del usuario
@@ -23,7 +23,7 @@ async def trigger_standup_event(meeting):
             where={"userId": meeting.userId, "active": True}
         )
         
-        logger.info(f"👥 [CLAW3D] Notificando a {len(agents)} agentes para moverse a: {meeting.location}")
+        logger.info(f"[CLAW3D] Notificando a {len(agents)} agentes para moverse a: {meeting.location}")
         
         # 2. Aquí crearíamos una sesión de charla temporal si fuesen a hablar
         # Por ahora creamos un "AgentActivity" para cada uno, marcándolo como en Standup
@@ -52,7 +52,7 @@ async def trigger_standup_event(meeting):
             where={"id": meeting.id},
             data={"lastRunAt": datetime.now(timezone.utc)}
         )
-        logger.info("✅ Reunion iniciada correctamente.")
+        logger.info("Reunion iniciada correctamente.")
 
     except Exception as e:
         logger.error(f"Error lanzando evento de Standup: {e}")
@@ -84,7 +84,7 @@ def start_scheduler():
     """
     Inicializa el APScheduler para revisar la agenda cada minuto.
     """
-    logger.info("🕒 Iniciando Motor de Agendas de Agentes (Cron-Job)")
+    logger.info("Iniciando Motor de Agendas de Agentes (Cron-Job)")
     # El trigger de minuto='*' correrá al inicio de cada minuto
     agenda_scheduler.add_job(check_and_execute_standups, CronTrigger(minute="*"))
     agenda_scheduler.start()

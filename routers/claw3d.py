@@ -218,7 +218,7 @@ async def claw3d_chat(request: Request):
             parts = agent_id.split("_", 1)
             active_session_id = parts[0]
             actual_role = parts[1]
-            logger.info(f"📍 Chat ruteado para sesión: {active_session_id}, Rol: {actual_role}")
+            logger.info(f"Chat ruteado para sesión: {active_session_id}, Rol: {actual_role}")
 
         display_name = actual_role
         user_id_context = data.get("userId")
@@ -247,7 +247,7 @@ async def claw3d_chat(request: Request):
                     final_instruction += f"Personalidad: {personality}\n"
                     final_instruction += f"Guías: {guidelines}\n\n"
                     final_instruction += "Responde como este agente específico en la oficina Claw3D de forma profesional."
-                    logger.info(f"✅ Usando perfil personalizado para: {agent_db.name} (Usuario: {user_id_context})")
+                    logger.info(f"Usando perfil personalizado para: {agent_db.name} (Usuario: {user_id_context})")
             except Exception as db_err:
                 logger.warning(f"No se pudo cargar perfil de DB: {db_err}")
 

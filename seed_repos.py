@@ -18,11 +18,11 @@ async def seed_github_repos():
     )
     
     if not session:
-        print("❌ No se encontró ninguna sesión activa.")
+        print("No se encontró ninguna sesión activa.")
         await db_manager.disconnect()
         return
 
-    print(f"🚀 Generando repositorios para: {session.title}")
+    print(f"Generando repositorios para: {session.title}")
     
     sample_repos = [
         {"name": "tripkode-core-api", "fullName": "TripKode/tripkode-core-api", "url": "https://github.com/TripKode/tripkode-core-api"},
@@ -50,9 +50,9 @@ async def seed_github_repos():
             )
         )
         count += 1
-        print(f"✅ Añadido: {repo_data['name']}")
+        print(f"Añadido: {repo_data['name']}")
     
-    print(f"\n✨ Operación completada. {count} repositorios inyectados en la DB vinculados a la sesión {session.sessionId}.")
+    print(f"\nOperación completada. {count} repositorios inyectados en la DB vinculados a la sesión {session.sessionId}.")
     await db_manager.disconnect()
 
 if __name__ == "__main__":

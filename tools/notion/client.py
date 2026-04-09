@@ -48,7 +48,7 @@ def _save_markdown_local(title: str, markdown_content: str, ctx: dict | None) ->
             "local_errors": sync.get("errors", []),
         }
     except Exception as e:
-        logger.warning(f"⚠️ No se pudo guardar markdown local para '{title}': {e}")
+        logger.warning(f"No se pudo guardar markdown local para '{title}': {e}")
         return {
             "local_project_path": None,
             "local_markdown_path": None,
@@ -82,7 +82,7 @@ def create_page(title: str, content_blocks: list, token: str = None, page_id: st
         }
     
     if not user_token:
-        logger.warning("⚠️ No hay token de Notion disponible. Usando fallback local.")
+        logger.warning("No hay token de Notion disponible. Usando fallback local.")
         return {
             "success": True,
             "url": None,
@@ -100,7 +100,7 @@ def create_page(title: str, content_blocks: list, token: str = None, page_id: st
     source = "Usuario/Sesión" if user_ws_id else "Configuración (.env)"
     
     if not parent_id:
-        logger.warning(f"⚠️ No hay Notion Workspace ID configurado. Usando fallback local.")
+        logger.warning(f"No hay Notion Workspace ID configurado. Usando fallback local.")
         return {
             "success": True,
             "url": None,
@@ -132,7 +132,7 @@ def create_page(title: str, content_blocks: list, token: str = None, page_id: st
             **local_save,
         }
     except Exception as e:
-        logger.error(f"❌ Error al crear página en Notion (parent_id={parent_id}): {e}")
+        logger.error(f"Error al crear página en Notion (parent_id={parent_id}): {e}")
         return {
             "success": True, 
             "url": None, 

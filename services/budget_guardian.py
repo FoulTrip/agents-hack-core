@@ -60,10 +60,10 @@ class BudgetGuardian:
                 if act.costEstimate:
                     total_spent_today += act.costEstimate
         
-        logger.info(f"💰 Presupuesto Diario: ${budget.dailyLimitUsd} | Gastado hoy: ${total_spent_today:.4f}")
+        logger.info(f"Presupuesto Diario: ${budget.dailyLimitUsd} | Gastado hoy: ${total_spent_today:.4f}")
         
         if total_spent_today >= budget.dailyLimitUsd:
-            logger.warning(f"🚨 BLOQUEO DE PRESUPUESTO para usuario {user_id}. Límite: ${budget.dailyLimitUsd}")
+            logger.warning(f"BLOQUEO DE PRESUPUESTO para usuario {user_id}. Límite: ${budget.dailyLimitUsd}")
             return False
             
         return True

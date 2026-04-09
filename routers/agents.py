@@ -51,7 +51,7 @@ async def list_user_agents(user_token: dict = Depends(get_current_user)):
             
             # Claw3D Persona
             vibe=getattr(a, "vibe", "Sharp and helpful") or "Sharp and helpful",
-            emoji=getattr(a, "emoji", "🤖") or "🤖",
+            emoji=getattr(a, "emoji", "") or "",
             personality=getattr(a, "personality", None),
             context=getattr(a, "context", None),
             guidelines=getattr(a, "guidelines", None),
@@ -107,7 +107,7 @@ async def list_agents_by_session(session_id: str, user_token: dict = Depends(get
             description=a.description,
             order=a.order,
             active=a.active,
-            emoji=getattr(a, "emoji", "🤖") or "🤖",
+            emoji=getattr(a, "emoji", "") or "",
         )
 
     return [to_model(a) for a in agents]
@@ -179,7 +179,7 @@ async def list_live_agents(user_token: dict = Depends(get_current_user)):
             "id": str(a.id),
             "name": a.name,
             "role": a.role,
-            "emoji": getattr(a, "emoji", "🤖") or "🤖",
+            "emoji": getattr(a, "emoji", "") or "",
             "color": a.color,
             "status": getattr(a, "status", "idle") or "idle",
             "officeDesk": getattr(a, "officeDesk", ""),
@@ -260,7 +260,7 @@ async def list_internal_agents(sessionId: Optional[str] = None):
             avatarUrl=g("avatarUrl"),
             
             vibe=g("vibe", "Sharp and helpful"),
-            emoji=g("emoji", "🤖"),
+            emoji=g("emoji", ""),
             personality=g("personality"),
             context=g("context"),
             guidelines=g("guidelines"),
@@ -313,15 +313,15 @@ async def activity_report(report: dict):
     from models import ActivityReport
     r = ActivityReport(**report)
     content = ""
-    if r.action == "talk" and r.message: content = f"💬 (to everyone): {r.message}"
-    elif r.action == "work" and r.thought: content = f"💻 Trabajando: {r.thought}"
-    elif r.thought: content = f"💡 Pensando: {r.thought}"
-    else: content = f"👉 Acción: {r.action}"
+    if r.action == "talk" and r.message: content = f"(to everyone): {r.message}"
+    elif r.action == "work" and r.thought: content = f"Trabajando: {r.thought}"
+    elif r.thought: content = f"Pensando: {r.thought}"
+    else: content = f"Acción: {r.action}"
 
     await session_manager.add_message(r.sessionId, "assistant", f"[{r.agentName}] {content}")
     await session_manager.broadcast_to_session(r.sessionId, {
         "type": "phase_start",
-        "logs": [f"🤖 AGENTE [{r.agentName}]: {content}"]
+        "logs": [f"AGENTE [{r.agentName}]: {content}"]
     })
     return {"status": "ok"}
 

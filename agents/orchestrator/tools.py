@@ -29,7 +29,7 @@ def propose_project_decision(category: str, decision: str, rationale: str) -> st
     except RuntimeError:
         asyncio.run(log_session_decision(session_id, category, decision, rationale))
         
-    logger.info(f"🧠 Aprendizaje Dinámico - Decisión registrada: {decision}")
+    logger.info(f"Aprendizaje Dinámico - Decisión registrada: {decision}")
     
     return f"¡Hecho! He registrado oficialmente la decisión: '{decision}' como parte del Estado de Verdad del proyecto."
 

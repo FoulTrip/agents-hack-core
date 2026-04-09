@@ -82,7 +82,7 @@ model Agent {
 
   // === Claw3D IDENTITY.md ===
   vibe              String?   // E.g., "Calm, sharp, and helpful"
-  emoji             String?   // E.g., "🧠"
+  emoji             String?   // E.g., "Brain"
 
   // === Claw3D SOUL / Persona ===
   personality       String?   // E.g., "Eres analítico y estricto"

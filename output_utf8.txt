@@ -1,1 +1,0 @@
-﻿(self, *, user_id: 'str', session_id: 'str', invocation_id: 'Optional[str]' = None, new_message: 'Optional[types.Content]' = None, state_delta: 'Optional[dict[str, Any]]' = None, run_config: 'Optional[RunConfig]' = None) -> 'AsyncGenerator[Event, None]'

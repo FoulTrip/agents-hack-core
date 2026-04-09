@@ -20,7 +20,7 @@ class BillingReconciliation:
         Ejecuta la reconciliación para todos los usuarios activos.
         Retorna un resumen de las acciones tomadas.
         """
-        logger.info("🕒 Iniciando Reconciliación de Facturación vía Cloud Scheduler...")
+        logger.info("Iniciando Reconciliación de Facturación vía Cloud Scheduler...")
         
         summary = {
             "processed_users": 0,
@@ -62,7 +62,7 @@ class BillingReconciliation:
                 diff = abs(gcp_total_tokens - local_total_tokens)
                 if local_total_tokens > 0 and (diff / local_total_tokens) > 0.01:
                     summary["discrepancies_found"] += 1
-                    logger.warning(f"⚠️ Discrepancia en {user.email}: GCloud={gcp_total_tokens}, Local={local_total_tokens}")
+                    logger.warning(f"Discrepancia en {user.email}: GCloud={gcp_total_tokens}, Local={local_total_tokens}")
                     
                     # Aplicamos un balance en la sesión más reciente para que el total coincida con la factura
                     if local_sessions:
@@ -78,7 +78,7 @@ class BillingReconciliation:
                             }
                         )
                         summary["adjustments_made"] += 1
-                        logger.info(f"✅ Ajuste contable aplicado a sesión {last_session.id}")
+                        logger.info(f"Ajuste contable aplicado a sesión {last_session.id}")
 
             except Exception as e:
                 logger.error(f"Error reconciliando usuario {user.email}: {e}")

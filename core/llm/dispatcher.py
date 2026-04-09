@@ -50,12 +50,12 @@ class LLMDispatcher:
         # El session_id para logs es el UUID de la sesión del pipeline, no el del ADK
         log_session_id = pipeline_session_id or session_id
 
-        # 🛡️ Sanitización de Datos (PII Redaction)
+        # Sanitización de Datos (PII Redaction)
         sanitized_message = sanitize_prompt(message)
         if preferred_model:
             agent.model = MODEL_ALIASES.get(preferred_model, preferred_model)
 
-        # 🔥 RUTEO DINÁMICO MULTI-ENTORNO
+        # RUTEO DINÁMICO MULTI-ENTORNO
         if "claude" in agent.model.lower():
             os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
         else:
@@ -102,7 +102,7 @@ class LLMDispatcher:
             # ── 1. Log de texto del agente (pensamiento, razonamiento) ──────────
                 if hasattr(event, "log") and event.log:
                     log_count += 1
-                    log_msg = f"🤖 {event.log}"
+                    log_msg = f"[Agent] {event.log}"
                     await sm.broadcast_to_session(log_session_id, {
                         "type": "agent_log",
                         "logs": [log_msg],
@@ -126,7 +126,7 @@ class LLMDispatcher:
                         tool_call_count += 1
                         tool_name = getattr(tc, "name", str(tc))
                         tool_args = getattr(tc, "args", {})
-                        log_msg = f"🔧 Tool call: {tool_name}"
+                        log_msg = f"Tool call: {tool_name}"
                         logger.info(
                             f"[dispatcher] tool_call pipeline_session={log_session_id} phase={phase_id} tool={tool_name} args_keys={list(tool_args.keys()) if isinstance(tool_args, dict) else 'n/a'}"
                         )
@@ -157,12 +157,12 @@ class LLMDispatcher:
                         tool_output_obj = getattr(tr, "output", {})
                         tool_output = str(tool_output_obj)
                         output_preview = tool_output.replace("\n", " ")[:160]
-                        log_msg = f"✅ Tool result: {tool_name}" + (f" — {output_preview}" if output_preview else "")
+                        log_msg = f"Tool result: {tool_name}" + (f" — {output_preview}" if output_preview else "")
                         logger.info(
                             f"[dispatcher] tool_result pipeline_session={log_session_id} phase={phase_id} tool={tool_name} output_type={type(tool_output_obj).__name__} output_len={len(tool_output)}"
                         )
                     
-                    # 🔍 Extraer Artifacts / Links estructurados desde resultados de tools
+                    # Extraer Artifacts / Links estructurados desde resultados de tools
                         if isinstance(tool_output_obj, dict):
                         # 1) Enlace de GitHub si la tool devuelve repo_full_name/repo_url
                             repo_full_name = (
